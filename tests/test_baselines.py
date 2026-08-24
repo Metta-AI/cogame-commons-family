@@ -219,6 +219,37 @@ def test_an_unknown_scripted_name_degrades_to_the_default_rather_than_raising():
     assert baseline.name == "steward"
 
 
+def test_open_room_stewards_spread_across_the_patches_instead_of_queueing():
+    """Why `fullest_patch` reads the seat in `open` rooms, and only there.
+
+    Every patch starts identical, so six stewards all reading "the fullest
+    patch" name patch 0 together and six individually restrained demands strip
+    it in one round: with the plain maximum the patch is dead by the end of a
+    20-round episode and the society scores 126 instead of 240. `closed` and
+    `partnership` take the plain maximum, because a partnership patch pays only
+    when BOTH partners name it and partners can only agree on a rule that does
+    not read the seat.
+    """
+    from coworld.examples.commons_family import headless  # noqa: PLC0415
+
+    config = CommonsConfig(module="harvest", num_agents=6, rounds=1,
+                           property_rights="open")
+    state = new_game(config)
+    module = module_for(config)
+    steward = make_baseline("steward")
+    named = {
+        steward.act(observation(state, config, slot, module))["patch"]
+        for slot in range(config.num_agents)
+    }
+    assert len(named) == config.num_agents, named
+
+    for rights in ("closed", "partnership"):
+        config = CommonsConfig(module="harvest", num_agents=6, rounds=20,
+                               property_rights=rights)
+        played = headless.run_episode(config, headless.build_policies(["steward"] * 6))
+        assert not any(played.module_state["dead"])
+
+
 @pytest.mark.parametrize("module_name", MODULES)
 def test_the_steward_never_kills_the_resource_on_its_own(module_name):
     """Six stewards leave the commons standing at the end of a full episode."""

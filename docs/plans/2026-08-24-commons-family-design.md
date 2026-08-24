@@ -497,6 +497,13 @@ It is meadow's `SustainablePolicy` generalised, and its algorithm is:
 4. `harvest`: choose the **fullest live patch it is allowed to name** (`open` → any; `closed` →
    its own; `partnership` → the pair patch with the higher stock, always naming it so a partner
    who also names it can be paid); demand `min(quota, floor(stock − 1))` so it never kills a patch.
+   In an **`open` room the ranking is offset by the seat** (`ranked[slot % len(ranked)]`), and
+   only there. Every patch starts identical, so six stewards all reading "the fullest patch" queue
+   on patch 0 and six individually restrained demands strip it in one round: measured over a
+   20-round episode, the plain maximum kills patch 0 and the society scores 126 where the offset
+   scores 240 with every patch alive. `closed` and `partnership` keep the plain maximum, because a
+   partnership patch pays only when BOTH partners name it and partners can only agree on a rule
+   that does not read the seat. A test asserts both halves.
 5. `allelopathic`: eat its favourite while its favourite is the plurality colour; otherwise spend
    1 unit planting the plurality colour and eat the plurality colour with the rest. Never eats
    more than `ripe[c] / num_players`.
