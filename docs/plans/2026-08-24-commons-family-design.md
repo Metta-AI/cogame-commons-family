@@ -126,7 +126,11 @@ cap of 3 — the temptation is exactly one unit wide. `property_rights` selects 
 - `partnership` — the six patches are dealt to three seeded pairs, two patches per pair, **public**.
   A patch yields this round only if **both** partners named it this round (either may demand 0 —
   naming it is "holding" it). Otherwise every demand on it yields nothing and writes an `unheld`
-  event.
+  event. **A seat that did not answer names nothing**: a pass, a `no_submission` and a seat that
+  never connected all arrive as the all-zero default decision, and counting that default as
+  "holding patch 0" would let an absent seat's partner harvest patch 0 alone every round while the
+  pair's other patch could never be held at all. The resolver skips a decision whose `src` is
+  `pass` — it names no patch, it cannot trespass, and it draws no `unheld` event of its own.
 
 **Module `allelopathic`.** `field_size = 60` plant slots; colours `red`, `green`, `blue` in that
 canonical order. `planted` starts 20/20/20, `ripe` starts 6/6/6, `ripen_base = 0.5`. Every cog is

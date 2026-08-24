@@ -79,11 +79,20 @@ class HarvestModule(Module):
         rights = state["property_rights"]
         live_demand: list[float] = [0.0] * len(decisions)
 
+        # A seat that did not answer names NOTHING. Its decision is the
+        # all-zero default, and counting that as "holding patch 0" would let a
+        # disconnected seat's partner harvest patch 0 alone every round while
+        # patch 1 could never be held at all.
+        answered = [decision.src != "pass" for decision in decisions]
+
         named: dict[int, set[int]] = {}
         for slot, decision in enumerate(decisions):
-            named.setdefault(decision.patch, set()).add(slot)
+            if answered[slot]:
+                named.setdefault(decision.patch, set()).add(slot)
 
         for slot, decision in enumerate(decisions):
+            if not answered[slot]:
+                continue
             patch = decision.patch
             if state["dead"][patch]:
                 if decision.harvest:

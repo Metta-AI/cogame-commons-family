@@ -6,7 +6,12 @@ import math
 
 import pytest
 
-from coworld.examples.commons_family.game.engine import CommonsConfig, module_for, new_game
+from coworld.examples.commons_family.game.engine import (
+    CommonsConfig,
+    module_for,
+    new_game,
+    parse_decision,
+)
 from coworld.examples.commons_family.game.modules.base import Decision
 
 APPROX = 1e-9
@@ -186,6 +191,59 @@ def test_harvest_partnership_pays_only_when_both_hold_the_patch():
     gains, _, events = module.resolve(state.module_state, decisions, config, 1)
     assert gains[left] == pytest.approx(2.0)
     assert not any(event["kind"] == "unheld" for event in events)
+
+
+def test_a_seat_that_never_answered_holds_no_patch():
+    """A pass names nothing; the default `patch=0` is not a claim.
+
+    Every seat's decision carries `patch`, and a seat that passes gets the
+    all-zero default. Counted as "named", that let the partner of a
+    disconnected seat harvest patch 0 alone every round — the pair's other
+    patch could never be held at all — and it made a passing seat a trespasser
+    in a closed room.
+    """
+    config, state, module = setup("harvest", property_rights="partnership")
+    left, right = state.module_state["pairs"][0]
+    other = next(slot for slot in range(6) if slot not in (left, right))
+
+    passing = [
+        parse_decision({}, slot, config, state, module, "pass") for slot in range(6)
+    ]
+    decisions = list(passing)
+    decisions[left] = parse_decision({"patch": 0, "harvest": 2}, left, config, state,
+                                     module, "llm")
+    gains, _, events = module.resolve(state.module_state, decisions, config, 0)
+    assert gains[left] == 0.0, "patch 0 is not held by a partner that never answered"
+    assert any(event["kind"] == "unheld" and event["slot"] == left for event in events)
+    # And the passing seats produce no events of their own.
+    assert not any(event.get("slot") == other for event in events)
+
+    # Patch 1 belongs to the same pair, and is just as unholdable while its
+    # partner is absent — the point being that neither patch is silently held.
+    decisions = list(passing)
+    decisions[left] = parse_decision({"patch": 1, "harvest": 2}, left, config, state,
+                                     module, "llm")
+    gains, _, _ = module.resolve(state.module_state, decisions, config, 1)
+    assert gains[left] == 0.0
+
+    # Both partners answer: the patch pays, either may demand 0.
+    decisions = list(passing)
+    decisions[left] = parse_decision({"patch": 0, "harvest": 2}, left, config, state,
+                                     module, "llm")
+    decisions[right] = parse_decision({"patch": 0, "harvest": 0}, right, config, state,
+                                      module, "llm")
+    gains, _, events = module.resolve(state.module_state, decisions, config, 2)
+    assert gains[left] == pytest.approx(2.0)
+    assert not any(event["kind"] == "unheld" for event in events)
+
+
+def test_a_passing_seat_is_not_a_trespasser_in_a_closed_room():
+    config, state, module = setup("harvest", property_rights="closed")
+    decisions = [
+        parse_decision({}, slot, config, state, module, "pass") for slot in range(6)
+    ]
+    _, _, events = module.resolve(state.module_state, decisions, config, 0)
+    assert not any(event["kind"] == "trespass" for event in events)
 
 
 def test_harvest_deals_are_a_public_permutation():

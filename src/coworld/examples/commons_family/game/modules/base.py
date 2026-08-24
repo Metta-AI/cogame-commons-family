@@ -25,7 +25,9 @@ class Decision:
 
     The union of every module's fields; a module reads only its own. `src`
     records where the decision came from and is the only field the replay's
-    `decision` event needs beyond the numbers.
+    `decision` event needs beyond the numbers — and it is load-bearing in one
+    place: `src == "pass"` means the seat did not answer at all, so `harvest`
+    does not count its default `patch` as a patch it named.
     """
 
     __slots__ = (
@@ -54,7 +56,7 @@ class Decision:
         sanction: int | None = None,
         message: str | None = None,
         note: str | None = None,
-        src: str = "pass",
+        src: str = "",
     ) -> None:
         self.harvest = harvest
         self.clean = clean
