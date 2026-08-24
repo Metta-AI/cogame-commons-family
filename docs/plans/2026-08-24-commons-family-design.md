@@ -436,9 +436,15 @@ in-process in the same step. The round barrier releases when the batch is comple
 `round_seconds = 20 s` elapses, whichever comes first, and never before
 `min_round_seconds = 3 s`.
 
-Per-seat worst case inside a round: one call at `decision_timeout_seconds = 8 s`, throttle sleeps
-≤ 3.5 s, one retry at 8 s = **19.5 s < 20 s**. So the round deadline is never the thing that cuts
-a legitimate reply short; it is the backstop.
+Per-seat worst case inside a round, said exactly: each of the two attempts walks the throttle
+ladder, which is **three sleeps and therefore up to four requests** (`llm.py`'s
+`for sleep_seconds in (*THROTTLE_SLEEPS, None)`), so a seat the provider throttles on every call
+issues up to **8 requests** in one round — `tests/test_llm.py` asserts exactly that count. What
+bounds it is not that arithmetic but the clock: every request's timeout is
+`min(decision_timeout_seconds, round_deadline − now)` and every throttle sleep is clamped to the
+same deadline, so the ladder cannot outlive the round and the seat falls back at the barrier. A
+*legitimate* reply is one call at ≤ 8 s inside a 20 s round, so the round deadline never cuts a
+healthy answer short; it is the backstop.
 
 Episode arithmetic, said out loud:
 
@@ -464,10 +470,13 @@ episodes — only the worker sidecar does), and sets
 **before** a round rather than after one, so the artifacts are written inside the budget instead
 of up to one `round_seconds` past it. Round 0 always plays: a deadline episode is still scored.
 
-**Request rate:** 6 requests per round, and a round is ≥ 3 s, so the game issues at most 120
-requests per minute. It enforces that as an explicit rolling budget (`llm_max_requests_per_minute
-= 120`, retries drawn from the same budget); a seat that cannot be called because the budget is
-exhausted plays its fallback baseline for that round with `fallback` cause `rate_budget`.
+**Request rate:** a healthy round is 6 requests, one per prompt seat. A round in which the
+provider throttles every call is up to 8 per seat and so up to **48**, which is why the ceiling is
+enforced rather than argued: `llm_max_requests_per_minute = 120` is a **rolling 60 s budget shared
+by all six seats**, retries and ladder steps draw from it, and a request that would exceed it is
+not made. That is the bound — the game cannot issue more than 120 requests a minute whatever the
+ladder does. A seat that cannot be called because the budget is exhausted plays its fallback
+baseline for that round with `fallback` cause `rate_budget`, rather than waiting for the window.
 
 ### Scripted baselines (same image, env-switched)
 

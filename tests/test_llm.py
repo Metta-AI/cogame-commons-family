@@ -246,6 +246,28 @@ def test_the_round_deadline_stops_the_ladder():
     assert time.monotonic() - started < 5.0
 
 
+def test_six_throttled_seats_cannot_outrun_the_rolling_budget():
+    """The ladder's worst case is 8 requests a seat; the budget is the ceiling.
+
+    Four requests per attempt and two attempts is up to 48 requests in one
+    round with six throttled seats. `llm_max_requests_per_minute` is a rolling
+    60 s budget shared by every seat, and retries and ladder steps draw from
+    it, so that is what bounds the rate — not the per-round arithmetic.
+    """
+    transport = StubTransport([LlmThrottled("429")])
+    config, state, module = setup(llm_max_requests_per_minute=20)
+    decider = LlmDecider(config, module, transport=transport, model="claude-haiku-4-5")
+    requests = {
+        slot: (observation(state, config, slot, module), "")
+        for slot in range(config.num_agents)
+    }
+    answers = decider.decide(requests, time.monotonic() + 1.5)
+    assert sorted(answers) == list(range(6))
+    assert all(cause in ("timeout", "rate_budget") for _, cause in answers.values())
+    assert decider.requests <= 20
+    assert transport.calls <= 20
+
+
 def test_the_rate_budget_falls_the_seat_back_rather_than_waiting():
     transport = StubTransport(['"harvest": 1}'])
     config, state, module = setup(llm_max_requests_per_minute=1)
