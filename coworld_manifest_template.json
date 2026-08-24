@@ -1,0 +1,907 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Metta-AI/coworld/main/src/coworld/coworld_manifest_schema.json",
+  "tags": [
+    "social",
+    "commons",
+    "public-goods",
+    "melting-pot",
+    "simultaneous",
+    "multiplayer",
+    "llm"
+  ],
+  "episode_timeout_minutes": 20,
+  "game": {
+    "name": "commons_family",
+    "description": "Six cogs share one destructible commons for twenty simultaneous rounds. Four resource modules — a silting orchard, six patches that die if stripped, three berry colours that starve each other, and mushrooms that pay everyone but the eater — run on one institutional layer of public ledger, costly sanctions, posted norms and chat, so the experiment is the physics and the institutions are the control.",
+    "owner": "coworld@softmax.com",
+    "runnable": {
+      "type": "game",
+      "image": "{{COMMONS_FAMILY_IMAGE}}",
+      "run": [
+        "/bin/commons-family"
+      ],
+      "env": {
+        "ANTHROPIC_API_KEY_URI": "secret://coworld/commons-family/anthropic_api_key"
+      },
+      "source_url": "https://github.com/Metta-AI/cogame-commons-family/tree/main/src/coworld/examples/commons_family/game"
+    },
+    "replay_viewer": {
+      "bundle": "static-replay-viewer"
+    },
+    "config_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tokens",
+        "players",
+        "num_agents"
+      ],
+      "properties": {
+        "tokens": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "players": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "num_agents": {
+          "type": "integer",
+          "minimum": 6,
+          "maximum": 6,
+          "default": 6
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 20260824
+        },
+        "module": {
+          "type": "string",
+          "enum": [
+            "cleanup",
+            "harvest",
+            "allelopathic",
+            "mushrooms"
+          ],
+          "default": "cleanup"
+        },
+        "rounds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20
+        },
+        "round_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 120,
+          "default": 20
+        },
+        "min_round_seconds": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 120,
+          "default": 3
+        },
+        "decision_timeout_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 120,
+          "default": 8
+        },
+        "episode_timeout_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 1200
+        },
+        "play_budget_fraction": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "default": 0.6
+        },
+        "player_connect_timeout_seconds": {
+          "type": "number",
+          "minimum": 0,
+          "default": 180
+        },
+        "effort_budget": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 3
+        },
+        "ledger_public": {
+          "type": "boolean",
+          "default": true
+        },
+        "sanctions_enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "sanction_cost": {
+          "type": "number",
+          "minimum": 0,
+          "default": 1
+        },
+        "sanction_burn": {
+          "type": "number",
+          "minimum": 0,
+          "default": 3
+        },
+        "chat_enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "chat_max_chars": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 140
+        },
+        "norm_text": {
+          "type": "string",
+          "default": ""
+        },
+        "fallback_scripted": {
+          "type": "string",
+          "default": "steward"
+        },
+        "llm_max_requests_per_minute": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 120
+        },
+        "stock_start": {
+          "type": "number",
+          "minimum": 0,
+          "default": 60
+        },
+        "stock_capacity": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 100
+        },
+        "regrowth_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.35
+        },
+        "collapse_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "default": 10
+        },
+        "pollution_start": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.3
+        },
+        "silt_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.12
+        },
+        "clean_power": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.05
+        },
+        "patch_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12,
+          "default": 6
+        },
+        "patch_capacity": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 20
+        },
+        "patch_start": {
+          "type": "number",
+          "minimum": 0,
+          "default": 12
+        },
+        "patch_regrowth": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.4
+        },
+        "property_rights": {
+          "type": "string",
+          "enum": [
+            "open",
+            "closed",
+            "partnership"
+          ],
+          "default": "open"
+        },
+        "field_size": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 600,
+          "default": 60
+        },
+        "ripen_base": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 0.5
+        },
+        "planted_start": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "default": [
+            20,
+            20,
+            20
+          ]
+        },
+        "ripe_start": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number",
+            "minimum": 0
+          },
+          "default": [
+            6,
+            6,
+            6
+          ]
+        },
+        "favorite_bonus": {
+          "type": "number",
+          "minimum": 0,
+          "default": 2
+        },
+        "favorite_base": {
+          "type": "number",
+          "minimum": 0,
+          "default": 1
+        },
+        "mushroom_start": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "default": [
+            8,
+            8,
+            8
+          ]
+        },
+        "mushroom_capacity": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 30
+        },
+        "mushroom_color_cap": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 15
+        },
+        "spawn_per_round": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 3
+        },
+        "red_value": {
+          "type": "number",
+          "minimum": 0,
+          "default": 1
+        },
+        "green_value": {
+          "type": "number",
+          "minimum": 0,
+          "default": 2
+        },
+        "blue_value": {
+          "type": "number",
+          "minimum": 0,
+          "default": 3
+        }
+      }
+    },
+    "results_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reason",
+        "rounds",
+        "scores",
+        "names",
+        "aliases"
+      ],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "deadline",
+            "no_players"
+          ]
+        },
+        "rounds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scores": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "type": "number"
+          }
+        },
+        "total_extracted": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "public_effort": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "sanctions_given": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "sanctions_received": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "welfare": {
+          "type": "number"
+        },
+        "residual_value": {
+          "type": "number",
+          "minimum": 0
+        },
+        "collapse_round": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "dead_patches": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 12,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "fallbacks": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "llm_requests": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "names": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "type": "string"
+          }
+        },
+        "aliases": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "type": "string"
+          }
+        },
+        "disconnected": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "protocols": {
+      "player": {
+        "type": "uri",
+        "value": "https://github.com/Metta-AI/cogame-commons-family/blob/main/src/coworld/examples/commons_family/game/docs/player_protocol_spec.md"
+      },
+      "global": {
+        "type": "uri",
+        "value": "https://github.com/Metta-AI/cogame-commons-family/blob/main/src/coworld/examples/commons_family/game/docs/global_protocol_spec.md"
+      }
+    },
+    "docs": {
+      "readme": {
+        "type": "uri",
+        "value": "https://github.com/Metta-AI/cogame-commons-family/blob/main/src/coworld/examples/commons_family/README.md"
+      },
+      "pages": [
+        {
+          "id": "rules.md",
+          "title": "rules.md",
+          "content": {
+            "type": "text",
+            "value": "# Commons Family — rules\n\nSix cogs share one destructible resource for twenty simultaneous rounds. Every round each cog\nsplits three units of effort between TAKING from the resource and doing the thing that keeps the\nresource alive, then everyone's choices settle at once. Taking pays you. Maintaining pays\neveryone, including the cogs who did not maintain. That is the whole game, four times over.\n\n## One round, in order\n\n1. The engine snapshots the resource and sends every cog an observation.\n2. All six decisions are made at the same time (one parallel batch of LLM calls, plus every\n   scripted seat in-process). The round's hard deadline is 20 s; a 3 s pacing floor keeps an\n   all-scripted episode watchable.\n3. Each reply is clamped: integers to their ranges, colours to the enum, the effort budget\n   enforced by reducing the MAINTENANCE field first, free text truncated on rune boundaries.\n4. Chat is published. Messages attach to this round and become visible NEXT round — decisions\n   are simultaneous, so no cog can read another's line before deciding.\n5. The module resolves and pays out.\n6. Sanctions apply, ascending slot: the payer loses 1.0, the target loses 3.0.\n7. The resource regrows / silts / ripens / spawns, latching any permanent death.\n8. Scores and the public ledger are booked and the round is recorded.\n\n## Scoring\n\n    score_i = sum of every module payoff you were paid\n              - 1.0 x sanctions you paid for\n              - 3.0 x sanctions you received\n\nHigher is better. Every module payoff is non-negative, so a score only goes below zero when a cog\npunished a lot or was punished a lot. The league ranks by these per-episode scores.\n\nThe grader is a separate, social-planner view: group welfare (all scores plus whatever the\ncommons still holds) divided by the module's planner optimum. It is not what the league ranks by.\n\n## How an episode ends\n\n- `complete` — all rounds settled. A dead orchard or six dead patches do NOT end the episode:\n  the remaining rounds are played out, and the post-collapse scavenging is data.\n- `deadline` — the wall-clock guard fired between rounds. Rounds already settled are scored as\n  they stand and the process exits 0.\n- `no_players` — no cog connected inside the connect timeout. All-zero scores, exit 0.\n"
+          }
+        },
+        {
+          "id": "modules.md",
+          "title": "modules.md",
+          "content": {
+            "type": "text",
+            "value": "# The four modules\n\nEach module is one `game_config.module` value: the same institutions, different resource physics.\n\n## `cleanup` — Clean Up\n\nOne apple stock (starts 60, capacity 100) and one river. `harvest` takes apples; `clean` clears\nsilt. Apples regrow by `0.35 x (1 - pollution) x apples x (1 - apples/100)`. Pollution rises 0.12\nevery round and each clean unit removes 0.05, so holding it steady costs 2.4 units a round —\n13 % of the society's whole effort, permanently, paid by whoever volunteers. Below 10 apples the\norchard is dead forever. Cleaning pays the cleaner nothing.\n\n## `harvest` — Commons Harvest (open / closed / partnership)\n\nSix patches, each up to 20 apples, starting at 12, regrowing at 0.40. Name one `patch`, demand\n`harvest` from it. A patch left with less than one apple is DEAD FOREVER. Sustainable is 2.0 per\npatch per round against a cap of 3 per cog — the temptation is exactly one unit wide.\n\n- `open` — anyone may name any patch.\n- `closed` — one patch per cog, publicly assigned; a demand by a non-owner yields nothing.\n- `partnership` — two patches per pair, publicly dealt; a patch pays only if BOTH partners name\n  it this round (either may demand 0 — naming it is holding it).\n\n## `allelopathic` — Allelopathic Harvest\n\nSixty plant slots in red, green and blue, starting 20/20/20 with 6 ripe of each. `eat` ripe\nberries of a colour, `plant` to convert a slot from the largest other colour. Each colour ripens\nby `0.5 x planted^2 / 60` — quadratic in its own share, which is the inhibition: an even split\nyields 10 berries a round for six cogs with 18 units of demand, a monoculture yields 30. Every\ncog has a SECRET favourite colour that pays it 2.0 instead of 1.0, exactly two cogs per colour.\nThe good outcome needs four of six to eat a colour that pays them half as much.\n\n## `mushrooms` — Externality Mushrooms\n\nRed, green and blue mushrooms, 8 of each, three new ones a round weighted by what has been\neaten. Red pays +1.0 to the eater. Green pays +2.0 split among all six. Blue pays +3.0 split\namong the five who did NOT eat it — the eater gets nothing. Eating k mushrooms freezes you for\nk rounds. Blue is worth three times red to the group and nothing at all to you.\n"
+          }
+        },
+        {
+          "id": "institutions.md",
+          "title": "institutions.md",
+          "content": {
+            "type": "text",
+            "value": "# Institutions\n\nThe layer around the resource is the same in every module, and each variant switches it.\n\n- **Public ledger** (`ledger_public`) — every cog's alias, cumulative extraction, cumulative\n  maintenance effort, its last five compact actions and its sanction counters. With the ledger\n  off, only the aggregate taken last round survives: the no-reputation control.\n- **Costly sanctions** (`sanctions_enabled`) — one target per cog per round. The payer loses 1.0\n  and the target loses 3.0. Welfare-negative on purpose.\n- **Posted norm** (`norm_text`) — one line in every observation and in every LLM system prompt.\n  It binds nothing; it is a focal point.\n- **Chat** (`chat_enabled`) — one signed public line per cog per round, at most 140 runes,\n  visible in the NEXT round's observation and never inside its own.\n\nCogs address each other by anonymous alias (`Cog-A` … `Cog-F`), assigned by a seeded permutation.\nReal policy names exist spectator-side only: in the replay, the results and the viewer. A cog can\nnever read who it is playing against.\n\nHidden from every cog: another cog's secret favourite colour, another cog's private note, any\ndecision for the current round, the episode seed, and the grader's optimum.\n\n| variant | ledger | sanctions | chat | norm |\n| --- | --- | --- | --- | --- |\n| `cleanup` | public | on | on | \"one apple each, and someone cleans every round\" |\n| `harvest-open` / `-closed` / `-partnership` | public | off | on | none |\n| `allelopathic` | public | on | on | none |\n| `mushrooms` | public | on | on | none |\n"
+          }
+        },
+        {
+          "id": "policies.md",
+          "title": "policies.md",
+          "content": {
+            "type": "text",
+            "value": "# Fielding a policy\n\nOne image, two environment variables. A policy is just a prompt.\n\n    PLAYER_PROMPT=\"Take the sustainable share and no more...\"   # an LLM seat\n    PLAYER_SCRIPTED=steward                                     # a scripted seat\n\n`PLAYER_SCRIPTED` wins when both are set. The player container registers its choice and then\nspectates: every decision is made in the game container, so all six seats' LLM calls go out as\none parallel batch per round and a seat that cannot answer falls back to `steward` rather than\nsilently passing.\n\nScripted baselines: `steward`, `free_rider`, `cleaner`, `punisher`, `reciprocator`, `deterrable`,\n`random`.\n\n## Reply schema\n\nOne JSON object. Unknown keys are ignored, leading or trailing prose is tolerated.\n\n| field | modules | type | range |\n| --- | --- | --- | --- |\n| `harvest` | cleanup, harvest | int | 0..3 |\n| `clean` | cleanup | int | 0..3, `harvest + clean <= 3` |\n| `patch` | harvest | int | 0..5 |\n| `eat` | allelopathic, mushrooms | int | 0..3 |\n| `eat_color` | allelopathic, mushrooms | enum | red / green / blue |\n| `plant` | allelopathic | int | 0..3, `eat + plant <= 3` |\n| `plant_color` | allelopathic | enum | red / green / blue |\n| `sanction` | all | int or null | a cog slot 0..5, never yourself |\n| `message` | all | text | at most 140 runes, public and signed |\n| `note` | all | text | at most 200 runes, private, echoed back to you next round |\n\nAnything out of range is clamped rather than rejected, and the effort budget is enforced by\nreducing the MAINTENANCE field first — a greedy reply loses its cleaning, not its harvest.\n"
+          }
+        }
+      ]
+    }
+  },
+  "player": [
+    {
+      "id": "commons-prompt",
+      "name": "Commons Prompt",
+      "type": "player",
+      "image": "{{COMMONS_FAMILY_IMAGE}}",
+      "run": [
+        "/bin/commons-family-player"
+      ],
+      "env": {
+        "PLAYER_PROMPT": "Take the sustainable share and no more: work out what the resource replaces each round, divide by six, take that. Spend an effort unit on the maintenance act whenever the resource is degrading. Say what your quota is and keep to it."
+      },
+      "source_url": "https://github.com/Metta-AI/cogame-commons-family/tree/main/src/coworld/examples/commons_family/player",
+      "description": "The reference prompt policy: an LLM seat whose whole strategy is its standing orders."
+    },
+    {
+      "id": "steward",
+      "name": "Steward",
+      "type": "player",
+      "image": "{{COMMONS_FAMILY_IMAGE}}",
+      "run": [
+        "/bin/commons-family-player"
+      ],
+      "env": {
+        "PLAYER_SCRIPTED": "steward"
+      },
+      "source_url": "https://github.com/Metta-AI/cogame-commons-family/tree/main/src/coworld/examples/commons_family/player",
+      "description": "Takes a sustainable share and maintains when the resource needs it. The fallback every prompt seat drops to."
+    },
+    {
+      "id": "cleaner",
+      "name": "Cleaner",
+      "type": "player",
+      "image": "{{COMMONS_FAMILY_IMAGE}}",
+      "run": [
+        "/bin/commons-family-player"
+      ],
+      "env": {
+        "PLAYER_SCRIPTED": "cleaner"
+      },
+      "source_url": "https://github.com/Metta-AI/cogame-commons-family/tree/main/src/coworld/examples/commons_family/player",
+      "description": "Spends one effort unit on the public good every round and stewards with the rest. The pure contributor, and exploitable."
+    },
+    {
+      "id": "punisher",
+      "name": "Punisher",
+      "type": "player",
+      "image": "{{COMMONS_FAMILY_IMAGE}}",
+      "run": [
+        "/bin/commons-family-player"
+      ],
+      "env": {
+        "PLAYER_SCRIPTED": "punisher"
+      },
+      "source_url": "https://github.com/Metta-AI/cogame-commons-family/tree/main/src/coworld/examples/commons_family/player",
+      "description": "Stewards, and pays to burn the worst over-taker on the public ledger."
+    },
+    {
+      "id": "free-rider",
+      "name": "Free Rider",
+      "type": "player",
+      "image": "{{COMMONS_FAMILY_IMAGE}}",
+      "run": [
+        "/bin/commons-family-player"
+      ],
+      "env": {
+        "PLAYER_SCRIPTED": "free_rider"
+      },
+      "source_url": "https://github.com/Metta-AI/cogame-commons-family/tree/main/src/coworld/examples/commons_family/player",
+      "description": "Takes the maximum every round and never maintains. The tragedy, distilled."
+    },
+    {
+      "id": "random",
+      "name": "Random Cog",
+      "type": "player",
+      "image": "{{COMMONS_FAMILY_IMAGE}}",
+      "run": [
+        "/bin/commons-family-player"
+      ],
+      "env": {
+        "PLAYER_SCRIPTED": "random"
+      },
+      "source_url": "https://github.com/Metta-AI/cogame-commons-family/tree/main/src/coworld/examples/commons_family/player",
+      "description": "Uniform legal decisions. The maximum-variance control."
+    }
+  ],
+  "grader": [
+    {
+      "id": "commons-grader",
+      "type": "grader",
+      "name": "Commons Social Planner Grader",
+      "description": "Scores an episode as group welfare divided by the module's planner optimum; reports survival, collapse round, dead patches, synchrony, extraction Gini and the public-effort share.",
+      "source_url": "https://github.com/Metta-AI/cogame-commons-family/tree/main/src/coworld/examples/commons_family/grader",
+      "image": "{{COMMONS_FAMILY_IMAGE}}",
+      "run": [
+        "python",
+        "-m",
+        "coworld.examples.commons_family.grader.commons_grader"
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "id": "cleanup",
+      "name": "Clean Up",
+      "game_config": {
+        "num_agents": 6,
+        "rounds": 20,
+        "round_seconds": 20,
+        "min_round_seconds": 3,
+        "player_connect_timeout_seconds": 180,
+        "players": [
+          {
+            "name": "Cog Alpha"
+          },
+          {
+            "name": "Cog Bravo"
+          },
+          {
+            "name": "Cog Charlie"
+          },
+          {
+            "name": "Cog Delta"
+          },
+          {
+            "name": "Cog Echo"
+          },
+          {
+            "name": "Cog Foxtrot"
+          }
+        ],
+        "module": "cleanup",
+        "ledger_public": true,
+        "sanctions_enabled": true,
+        "chat_enabled": true,
+        "norm_text": "Posted norm: one apple each, and someone cleans every round.",
+        "seed": 20260824
+      },
+      "description": "One orchard, one silting river. Cleaning pays nobody and keeps everybody fed. Public ledger, costly sanctions, a posted quota and chat."
+    },
+    {
+      "id": "harvest-open",
+      "name": "Commons Harvest (Open)",
+      "game_config": {
+        "num_agents": 6,
+        "rounds": 20,
+        "round_seconds": 20,
+        "min_round_seconds": 3,
+        "player_connect_timeout_seconds": 180,
+        "players": [
+          {
+            "name": "Cog Alpha"
+          },
+          {
+            "name": "Cog Bravo"
+          },
+          {
+            "name": "Cog Charlie"
+          },
+          {
+            "name": "Cog Delta"
+          },
+          {
+            "name": "Cog Echo"
+          },
+          {
+            "name": "Cog Foxtrot"
+          }
+        ],
+        "module": "harvest",
+        "property_rights": "open",
+        "seed": 20260825,
+        "ledger_public": true,
+        "sanctions_enabled": false,
+        "chat_enabled": true
+      },
+      "description": "Six patches anyone may pick from. Strip one below a single apple and it is dead forever. The no-property-rights arm of the A/B."
+    },
+    {
+      "id": "harvest-closed",
+      "name": "Commons Harvest (Closed)",
+      "game_config": {
+        "num_agents": 6,
+        "rounds": 20,
+        "round_seconds": 20,
+        "min_round_seconds": 3,
+        "player_connect_timeout_seconds": 180,
+        "players": [
+          {
+            "name": "Cog Alpha"
+          },
+          {
+            "name": "Cog Bravo"
+          },
+          {
+            "name": "Cog Charlie"
+          },
+          {
+            "name": "Cog Delta"
+          },
+          {
+            "name": "Cog Echo"
+          },
+          {
+            "name": "Cog Foxtrot"
+          }
+        ],
+        "module": "harvest",
+        "property_rights": "closed",
+        "seed": 20260826,
+        "ledger_public": true,
+        "sanctions_enabled": false,
+        "chat_enabled": true
+      },
+      "description": "The same six patches, one publicly assigned to each cog. Single-cog excludability: the middle arm of the property-rights A/B."
+    },
+    {
+      "id": "harvest-partnership",
+      "name": "Commons Harvest (Partnership)",
+      "game_config": {
+        "num_agents": 6,
+        "rounds": 20,
+        "round_seconds": 20,
+        "min_round_seconds": 3,
+        "player_connect_timeout_seconds": 180,
+        "players": [
+          {
+            "name": "Cog Alpha"
+          },
+          {
+            "name": "Cog Bravo"
+          },
+          {
+            "name": "Cog Charlie"
+          },
+          {
+            "name": "Cog Delta"
+          },
+          {
+            "name": "Cog Echo"
+          },
+          {
+            "name": "Cog Foxtrot"
+          }
+        ],
+        "module": "harvest",
+        "property_rights": "partnership",
+        "seed": 20260827,
+        "ledger_public": true,
+        "sanctions_enabled": false,
+        "chat_enabled": true
+      },
+      "description": "The same six patches dealt to three public pairs; a patch pays only if both partners hold it. The coordination arm of the A/B."
+    },
+    {
+      "id": "allelopathic",
+      "name": "Allelopathic Harvest",
+      "game_config": {
+        "num_agents": 6,
+        "rounds": 20,
+        "round_seconds": 20,
+        "min_round_seconds": 3,
+        "player_connect_timeout_seconds": 180,
+        "players": [
+          {
+            "name": "Cog Alpha"
+          },
+          {
+            "name": "Cog Bravo"
+          },
+          {
+            "name": "Cog Charlie"
+          },
+          {
+            "name": "Cog Delta"
+          },
+          {
+            "name": "Cog Echo"
+          },
+          {
+            "name": "Cog Foxtrot"
+          }
+        ],
+        "module": "allelopathic",
+        "ledger_public": true,
+        "sanctions_enabled": true,
+        "chat_enabled": true,
+        "seed": 20260828
+      },
+      "description": "Three berry colours that starve each other, and a secret favourite per cog that pays double. The good outcome needs four of six cogs to give up their preference."
+    },
+    {
+      "id": "mushrooms",
+      "name": "Externality Mushrooms",
+      "game_config": {
+        "num_agents": 6,
+        "rounds": 20,
+        "round_seconds": 20,
+        "min_round_seconds": 3,
+        "player_connect_timeout_seconds": 180,
+        "players": [
+          {
+            "name": "Cog Alpha"
+          },
+          {
+            "name": "Cog Bravo"
+          },
+          {
+            "name": "Cog Charlie"
+          },
+          {
+            "name": "Cog Delta"
+          },
+          {
+            "name": "Cog Echo"
+          },
+          {
+            "name": "Cog Foxtrot"
+          }
+        ],
+        "module": "mushrooms",
+        "ledger_public": true,
+        "sanctions_enabled": true,
+        "chat_enabled": true,
+        "seed": 20260829
+      },
+      "description": "Red pays you, green pays everyone, blue pays everyone but you, and eating freezes you. The instant-externality control case."
+    }
+  ],
+  "certification": {
+    "game_config": {
+      "num_agents": 6,
+      "module": "cleanup",
+      "rounds": 8,
+      "round_seconds": 6,
+      "min_round_seconds": 3,
+      "seed": 20260824,
+      "ledger_public": true,
+      "sanctions_enabled": true,
+      "chat_enabled": true,
+      "norm_text": "Posted norm: one apple each, and someone cleans every round.",
+      "player_connect_timeout_seconds": 180,
+      "players": [
+        {
+          "name": "Commons Prompt"
+        },
+        {
+          "name": "Steward"
+        },
+        {
+          "name": "Cleaner"
+        },
+        {
+          "name": "Punisher"
+        },
+        {
+          "name": "Free Rider"
+        },
+        {
+          "name": "Random Cog"
+        }
+      ]
+    },
+    "players": [
+      {
+        "player_id": "commons-prompt"
+      },
+      {
+        "player_id": "steward"
+      },
+      {
+        "player_id": "cleaner"
+      },
+      {
+        "player_id": "punisher"
+      },
+      {
+        "player_id": "free-rider"
+      },
+      {
+        "player_id": "random"
+      }
+    ]
+  }
+}

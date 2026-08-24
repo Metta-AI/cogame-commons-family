@@ -1,0 +1,47 @@
+<!doctype html>
+<title>Commons Family — Admin</title>
+<style>
+  body { background:#eef2f7; color:#172033; margin:0; padding:24px;
+         font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+  h1 { font-size:26px; margin:0 0 10px; }
+  #status { background:#172033; border-radius:999px; color:#fff; display:inline-flex;
+            font-size:13px; font-weight:800; margin-bottom:14px; padding:7px 12px; }
+  button, input { border:1px solid #c6d2e4; border-radius:8px; font-size:15px;
+                  margin-right:8px; padding:7px 12px; }
+  button { background:#172033; border:none; color:#fff; cursor:pointer; font-weight:700; }
+  pre { background:#fff; border:1px solid #dbe2ee; border-radius:12px;
+        font-size:12px; margin-top:14px; overflow:auto; padding:14px; }
+</style>
+<h1>Commons Family — Admin</h1>
+<div id="status">connecting…</div>
+<div>
+  <button id="pause">Pause</button>
+  <button id="resume">Resume</button>
+  <input id="round-seconds" type="number" min="1" max="120" value="20">
+  <button id="set-round-seconds">Set round seconds</button>
+</div>
+<pre id="state">…</pre>
+<script>
+  const target = new URL(window.location.href)
+  target.pathname = '/admin'
+  target.search = ''
+  if (target.protocol === 'http:') target.protocol = 'ws:'
+  if (target.protocol === 'https:') target.protocol = 'wss:'
+  const socket = new WebSocket(target)
+  const statusEl = document.getElementById('status')
+  socket.onmessage = (event) => {
+    const state = JSON.parse(event.data)
+    statusEl.textContent = `round ${state.round}/${state.rounds} · ` +
+      `${state.paused ? 'paused' : state.done ? 'finished' : 'running'} · ` +
+      `${state.module}`
+    document.getElementById('state').textContent = JSON.stringify(state, null, 2)
+  }
+  socket.onclose = () => { statusEl.textContent += ' · disconnected' }
+  const send = (command) => socket.send(JSON.stringify(command))
+  document.getElementById('pause').onclick = () => send({ command: 'pause' })
+  document.getElementById('resume').onclick = () => send({ command: 'resume' })
+  document.getElementById('set-round-seconds').onclick = () => send({
+    command: 'round_seconds',
+    round_seconds: Number(document.getElementById('round-seconds').value)
+  })
+</script>

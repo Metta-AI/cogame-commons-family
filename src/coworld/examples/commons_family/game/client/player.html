@@ -1,0 +1,114 @@
+<!doctype html>
+<title>Commons Family — Player Client</title>
+<style>
+  :root { --ink:#172033; --muted:#637089; --page:#eef2f7; --panel:#fff; --red:#dc2626; }
+  * { box-sizing: border-box; }
+  body { background: var(--page); color: var(--ink); margin: 0; padding: 24px;
+         font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  .eyebrow { color: var(--muted); font-size:12px; font-weight:800;
+             letter-spacing:.08em; text-transform:uppercase; }
+  #status { background:#172033; border-radius:999px; color:#fff; display:inline-flex;
+            font-size:13px; font-weight:800; margin:10px 0 16px; padding:7px 12px; }
+  .panel { background: var(--panel); border:1px solid #dbe2ee; border-radius:12px;
+           margin-bottom:14px; padding:14px 16px; }
+  .panel h2 { color: var(--muted); font-size:12px; font-weight:800;
+              letter-spacing:.08em; margin:0 0 8px; text-transform:uppercase; }
+  pre { font-size:12px; margin:0; overflow:auto; white-space:pre-wrap; }
+  label { display:inline-flex; align-items:center; gap:6px; margin:0 12px 8px 0;
+          font-size:13px; }
+  input, select { border:1px solid #c6d2e4; border-radius:8px; font-size:14px;
+                  padding:5px 8px; }
+  button { background:#172033; border:none; border-radius:8px; color:#fff;
+           cursor:pointer; font-size:14px; font-weight:700; padding:8px 14px; }
+  #norm { color:#7c2d12; font-weight:700; }
+</style>
+<div class="eyebrow">Coworld</div>
+<h1 id="title">Commons Family</h1>
+<div id="status">connecting…</div>
+<div class="panel"><h2>Posted norm</h2><div id="norm">—</div></div>
+<div class="panel"><h2>The commons</h2><pre id="resource">…</pre></div>
+<div class="panel"><h2>Your decision</h2>
+  <div id="fields"></div>
+  <label>sanction <select id="sanction"><option value="">no one</option></select></label>
+  <label>message <input id="message" maxlength="140" size="40"></label>
+  <div><button id="submit">Submit decision</button></div>
+</div>
+<div class="panel"><h2>Ledger</h2><pre id="ledger">…</pre></div>
+<div class="panel"><h2>Chat last round</h2><pre id="chat">…</pre></div>
+<script>
+  // Module-aware: the decision form is built from the observation's module,
+  // so one page drives all four modules.
+  const FIELDS = {
+    cleanup: [['harvest','int'], ['clean','int']],
+    harvest: [['patch','int'], ['harvest','int']],
+    allelopathic: [['eat','int'], ['eat_color','color'], ['plant','int'],
+                   ['plant_color','color']],
+    mushrooms: [['eat','int'], ['eat_color','color']]
+  }
+  const statusEl = document.getElementById('status')
+  let observation = null
+  function buildFields(obs) {
+    const spec = FIELDS[obs.module] || FIELDS.cleanup
+    const max = obs.module === 'harvest'
+      ? { patch: (obs.module_state.patches || []).length - 1 } : {}
+    document.getElementById('fields').innerHTML = spec.map(([name, kind]) =>
+      kind === 'color'
+        ? `<label>${name} <select id="f-${name}"><option>red</option>` +
+          `<option>green</option><option>blue</option></select></label>`
+        : `<label>${name} <input id="f-${name}" type="number" min="0" max="` +
+          `${max[name] !== undefined ? max[name] : obs.effort_budget}" value="0"></label>`
+    ).join('')
+  }
+  function render(obs) {
+    observation = obs
+    document.getElementById('title').textContent =
+      `Commons Family — ${obs.alias || 'slot ' + obs.slot} (${obs.module})`
+    statusEl.textContent =
+      `round ${obs.round}/${obs.rounds} · ${obs.type === 'final' ? 'finished' : 'live'}` +
+      ` · your score ${obs.score}`
+    document.getElementById('norm').textContent = obs.norm_text || '—'
+    document.getElementById('resource').textContent =
+      JSON.stringify(obs.module_state, null, 2)
+    buildFields(obs)
+    const sanction = document.getElementById('sanction')
+    sanction.disabled = !obs.sanctions_enabled
+    sanction.innerHTML = '<option value="">no one</option>' +
+      (obs.ledger || []).filter((e) => e.slot !== obs.slot)
+        .map((e) => `<option value="${e.slot}">${e.alias}</option>`).join('')
+    document.getElementById('ledger').textContent = obs.ledger
+      ? JSON.stringify(obs.ledger, null, 2)
+      : 'the ledger is anonymous in this variant'
+    document.getElementById('chat').textContent =
+      (obs.messages_last_round || []).map((m) => `${m.alias}: ${m.text}`).join('\n') || '—'
+  }
+  const target = new URL(window.location.href)
+  target.pathname = '/player'
+  if (target.protocol === 'http:') target.protocol = 'ws:'
+  if (target.protocol === 'https:') target.protocol = 'wss:'
+  const socket = new WebSocket(target)
+  socket.onmessage = (event) => {
+    const message = JSON.parse(event.data)
+    if (message.type === 'welcome') {
+      // Register as a human seat: no standing orders, no scripted baseline.
+      socket.send(JSON.stringify({ type: 'prompt', prompt: '', scripted: '' }))
+      return
+    }
+    render(message)
+  }
+  socket.onclose = () => { statusEl.textContent += ' · disconnected' }
+  document.getElementById('submit').onclick = () => {
+    if (!observation || socket.readyState !== WebSocket.OPEN) return
+    const decision = { type: 'decision' }
+    for (const [name, kind] of (FIELDS[observation.module] || FIELDS.cleanup)) {
+      const el = document.getElementById('f-' + name)
+      if (el) decision[name] = kind === 'color' ? el.value : Number(el.value)
+    }
+    const sanction = document.getElementById('sanction').value
+    if (observation.sanctions_enabled && sanction !== '') decision.sanction = Number(sanction)
+    const message = document.getElementById('message').value.trim()
+    if (observation.chat_enabled && message) decision.message = message
+    socket.send(JSON.stringify(decision))
+    document.getElementById('message').value = ''
+  }
+</script>

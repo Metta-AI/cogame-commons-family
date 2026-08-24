@@ -1,0 +1,33 @@
+[
+  {
+    "name": "commons-family-steward",
+    "run": "/bin/commons-family-player",
+    "env": {
+      "PLAYER_PROMPT": "Take the sustainable share and no more: work out what the resource replaces each round, divide by six, take that. Spend an effort unit on the maintenance act whenever the resource is degrading. Say what your quota is and keep to it.",
+      "USE_BEDROCK": "true"
+    }
+  },
+  {
+    "name": "commons-family-warden",
+    "run": "/bin/commons-family-player",
+    "env": {
+      "PLAYER_PROMPT": "Read the ledger first. Match the most restrained cog, not the average one. If one cog is taking more than its share two rounds running, punish it once and say why; otherwise never pay for punishment.",
+      "USE_BEDROCK": "true"
+    },
+    "player": "ply_bac48eb1-662e-44f8-973d-f3e016dccf5d"
+  },
+  {
+    "name": "commons-family-freerider",
+    "run": "/bin/commons-family-player",
+    "env": {
+      "PLAYER_SCRIPTED": "free_rider"
+    }
+  },
+  {
+    "name": "commons-family-cleaner",
+    "run": "/bin/commons-family-player",
+    "env": {
+      "PLAYER_SCRIPTED": "cleaner"
+    }
+  }
+]

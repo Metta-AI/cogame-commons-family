@@ -1,0 +1,60 @@
+<!doctype html>
+<title>Commons Family — Global View</title>
+<style>
+  :root { --ink:#172033; --muted:#637089; --page:#eef2f7; --panel:#fff;
+          --green:#059669; --amber:#d97706; --red:#dc2626; }
+  * { box-sizing: border-box; }
+  body { background: var(--page); color: var(--ink); margin: 0; padding: 24px;
+         font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+  h1 { font-size: 30px; margin: 0 0 4px; }
+  .eyebrow { color: var(--muted); font-size: 12px; font-weight: 800;
+             letter-spacing: .08em; text-transform: uppercase; }
+  #status { background:#172033; border-radius:999px; color:#fff; display:inline-flex;
+            font-size:13px; font-weight:800; margin:10px 0 16px; padding:7px 12px; }
+  .panel { background: var(--panel); border:1px solid #dbe2ee; border-radius:12px;
+           margin-bottom:14px; padding:14px 16px; }
+  .panel h2 { color: var(--muted); font-size:12px; font-weight:800;
+              letter-spacing:.08em; margin:0 0 8px; text-transform:uppercase; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th { color: var(--muted); font-size:11px; letter-spacing:.06em;
+       text-align:left; text-transform:uppercase; padding:4px 6px; }
+  td { border-top:1px solid #eef2f7; padding:5px 6px; }
+  pre { font-size:12px; margin:0; overflow:auto; white-space:pre-wrap; }
+  .dead { color: var(--red); font-weight: 800; }
+</style>
+<div class="eyebrow">Coworld</div>
+<h1 id="title">Commons Family</h1>
+<div id="status">connecting…</div>
+<div class="panel"><h2>The commons</h2><pre id="resource">…</pre></div>
+<div class="panel"><h2>Cogs</h2>
+  <table><thead><tr><th>alias</th><th>policy</th><th>score</th>
+    <th>taken</th><th>upkeep</th></tr></thead><tbody id="cogs"></tbody></table>
+</div>
+<div class="panel"><h2>Last settled round</h2><pre id="last">…</pre></div>
+<script>
+  const statusEl = document.getElementById('status')
+  function render(state) {
+    document.getElementById('title').textContent =
+      'Commons Family — ' + (state.module || '')
+    const phase = state.done ? ('finished (' + (state.reason || 'complete') + ')')
+      : state.started ? 'live' : 'waiting for cogs'
+    statusEl.textContent =
+      `round ${state.round}/${state.rounds} · ${phase} · ${state.connected.length} connected`
+    document.getElementById('resource').textContent =
+      JSON.stringify(state.module_state, null, 2)
+    document.getElementById('cogs').innerHTML = (state.aliases || [])
+      .map((alias, slot) => `<tr><td>${alias}</td><td>${state.player_names[slot]}</td>` +
+        `<td>${state.scores[slot]}</td><td>${state.total_extracted[slot]}</td>` +
+        `<td>${state.public_effort[slot]}</td></tr>`).join('')
+    document.getElementById('last').textContent = state.last_round
+      ? JSON.stringify(state.last_round, null, 2) : 'no round has settled yet'
+  }
+  const target = new URL(window.location.href)
+  target.pathname = '/global'
+  target.search = ''
+  if (target.protocol === 'http:') target.protocol = 'ws:'
+  if (target.protocol === 'https:') target.protocol = 'wss:'
+  const socket = new WebSocket(target)
+  socket.onmessage = (event) => render(JSON.parse(event.data))
+  socket.onclose = () => { statusEl.textContent += ' · disconnected' }
+</script>

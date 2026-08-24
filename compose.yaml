@@ -1,0 +1,7 @@
+services:
+  commons_family:
+    image: coworld-commons-family:latest
+    platform: linux/amd64
+    build:
+      context: .
+      network: host

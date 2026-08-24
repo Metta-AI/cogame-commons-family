@@ -1,0 +1,267 @@
+"""End-to-end episodes: the settle path, the artifacts, and the three end reasons.
+
+The `complete` case runs through `headless.run_episode(parallel_seats=True)`;
+the `deadline` and `no_players` cases run through the SERVER's own `_play_game`
+loop, because the wall-clock guard and the no-player settle live there and
+nowhere else.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import importlib.util
+import itertools
+import json
+import os
+import sys
+from pathlib import Path
+
+import pytest
+
+from coworld.examples.commons_family import headless
+from coworld.examples.commons_family.game.engine import (
+    END_REASONS,
+    CommonsConfig,
+    module_for,
+    results,
+)
+
+from .conftest import EPISODE_POLICIES, build_config, run
+
+SERVER_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "src/coworld/examples/commons_family/game/server.py"
+)
+_COUNTER = itertools.count()
+
+
+def load_server(tmp_path: Path, game_config: dict, monkeypatch):
+    """Import a FRESH game server bound to `game_config`.
+
+    The server reads its config at import time (that is the Coworld game
+    contract), so each case needs its own module object rather than a reload.
+    """
+    work = tmp_path / f"srv{next(_COUNTER)}"
+    work.mkdir()
+    config_path = work / "config.json"
+    config_path.write_text(json.dumps(game_config), encoding="utf-8")
+    for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY_URI",
+                 "AWS_ENDPOINT_URL_BEDROCK_RUNTIME", "COWORLD_TIMEOUT_SECONDS"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("COGAME_CONFIG_URI", config_path.as_uri())
+    monkeypatch.setenv("COGAME_RESULTS_URI", (work / "results.json").as_uri())
+    monkeypatch.setenv("COGAME_SAVE_REPLAY_URI", (work / "replay.json").as_uri())
+    monkeypatch.setenv("COMMONS_FAMILY_POST_GAME_LINGER_SECONDS", "0")
+    monkeypatch.setenv("COMMONS_FAMILY_POST_GAME_MAX_LINGER_SECONDS", "0")
+
+    module_name = f"_commons_family_server_{next(_COUNTER)}"
+    spec = importlib.util.spec_from_file_location(module_name, SERVER_PATH)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    module.REGISTRATION_GRACE_SECONDS = 0.0
+    return module, work
+
+
+def base_game_config(**overrides) -> dict:
+    config = {
+        "tokens": [f"token-{index}" for index in range(6)],
+        "players": [{"name": f"policy-{index}"} for index in range(6)],
+        "num_agents": 6,
+        "module": "cleanup",
+        "rounds": 8,
+        "round_seconds": 2,
+        "min_round_seconds": 0,
+        "sanctions_enabled": True,
+        "chat_enabled": True,
+        "seed": 20260824,
+    }
+    config.update(overrides)
+    return config
+
+
+def seat_all(module, scripted: list[str]) -> None:
+    for slot, name in enumerate(scripted):
+        module.session.connected_ever.add(slot)
+        module.session.registrations[slot] = {"prompt": "", "scripted": name}
+
+
+def recomputed_scores(replay: dict) -> list[float]:
+    """The scoring formula, applied to the round records from the outside."""
+    config = replay["config"]
+    seats = config["num_agents"]
+    scores = [0.0] * seats
+    for record in replay["rounds"]:
+        for slot, gain in enumerate(record["gains"]):
+            scores[slot] += gain
+        for decision in record["decisions"]:
+            target = decision.get("sanction")
+            if target is None:
+                continue
+            scores[decision["slot"]] -= config["sanction_cost"]
+            scores[target] -= config["sanction_burn"]
+    return [round(value, 3) for value in scores]
+
+
+# ---------------------------------------------------------------------------
+# complete
+# ---------------------------------------------------------------------------
+
+
+def test_a_full_episode_settles_complete_and_writes_both_artifacts(episode_dir, replay, results):
+    assert (episode_dir / "results.json").stat().st_size > 0
+    assert (episode_dir / "replay.json").stat().st_size > 0
+    assert results["reason"] == "complete"
+    assert results["reason"] in END_REASONS
+    assert results["rounds"] == 8
+    assert len(replay["rounds"]) == 8
+    assert [record["r"] for record in replay["rounds"]] == list(range(8))
+
+
+def test_scores_match_the_formula_recomputed_from_the_round_records(replay, results):
+    assert results["scores"] == pytest.approx(recomputed_scores(replay), abs=1e-6)
+
+
+def test_the_final_round_record_carries_the_final_scores(replay, results):
+    assert replay["rounds"][-1]["scores"] == pytest.approx(results["scores"], abs=1e-6)
+
+
+def test_welfare_is_the_scores_plus_what_the_commons_still_holds(replay, results):
+    assert results["welfare"] == pytest.approx(
+        sum(results["scores"]) + results["residual_value"], abs=1e-3
+    )
+
+
+@pytest.mark.parametrize("module_name", ["cleanup", "harvest", "allelopathic", "mushrooms"])
+def test_every_module_plays_a_whole_episode(module_name):
+    config = build_config(module=module_name, rounds=8)
+    state = run(config)
+    assert state.round == 8
+    assert len(state.history) == 8
+    payload = results(state, config, module_for(config), "complete", ["p"] * 6, 0)
+    assert payload["reason"] == "complete"
+    assert len(payload["scores"]) == 6
+
+
+def test_two_runs_with_the_same_seed_are_byte_identical_modulo_generated_at(tmp_path):
+    def replay_bytes(directory: str) -> bytes:
+        config = build_config()
+        state = run(config)
+        out = tmp_path / directory
+        headless.write_artifacts(state, config, out)
+        payload = json.loads((out / "replay.json").read_bytes().decode("utf-8"))
+        payload.pop("generated_at")
+        return json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
+
+    assert replay_bytes("a") == replay_bytes("b")
+
+
+def test_a_different_seed_produces_a_different_episode(tmp_path):
+    left = run(build_config(seed=11))
+    right = run(build_config(seed=12))
+    assert (left.aliases, left.scores) != (right.aliases, right.scores)
+
+
+# ---------------------------------------------------------------------------
+# the server's own loop: complete, deadline, no_players
+# ---------------------------------------------------------------------------
+
+
+def test_the_server_loop_settles_complete_and_writes_utf8_artifacts(tmp_path, monkeypatch):
+    module, work = load_server(tmp_path, base_game_config(), monkeypatch)
+    seat_all(module, ["steward", "cleaner", "punisher", "reciprocator", "free_rider", "random"])
+    asyncio.run(module._play_game())
+
+    payload = json.loads((work / "results.json").read_bytes().decode("utf-8"))
+    replay = json.loads((work / "replay.json").read_bytes().decode("utf-8"))
+    assert payload["reason"] == "complete"
+    assert payload["rounds"] == 8
+    assert len(replay["rounds"]) == 8
+    assert payload["disconnected"] == [False] * 6
+    assert payload["llm_requests"] == 0          # no credentials: zero calls
+    assert payload["fallbacks"] == [0] * 6
+
+
+def test_the_wall_clock_guard_settles_deadline_with_the_rounds_it_played(tmp_path, monkeypatch):
+    # 0.6 x 0.001 s of play budget: the guard fires between round 0 and round 1.
+    module, work = load_server(
+        tmp_path,
+        base_game_config(rounds=20, episode_timeout_seconds=0.001),
+        monkeypatch,
+    )
+    seat_all(module, ["steward"] * 6)
+    asyncio.run(module._play_game())
+
+    payload = json.loads((work / "results.json").read_bytes().decode("utf-8"))
+    assert payload["reason"] == "deadline"
+    assert 1 <= payload["rounds"] < 20
+    # Scores are real, not zeroed: a deadline episode is still rankable.
+    assert sum(payload["scores"]) > 0.0
+    replay = json.loads((work / "replay.json").read_bytes().decode("utf-8"))
+    assert len(replay["rounds"]) == payload["rounds"]
+    assert any(event["kind"] == "deadline" for event in replay["events"])
+
+
+def test_no_seat_connecting_settles_no_players_with_zero_scores(tmp_path, monkeypatch):
+    module, work = load_server(tmp_path, base_game_config(), monkeypatch)
+    asyncio.run(module._play_game())
+
+    payload = json.loads((work / "results.json").read_bytes().decode("utf-8"))
+    assert payload["reason"] == "no_players"
+    assert payload["rounds"] == 0
+    assert payload["scores"] == [0.0] * 6
+    assert (work / "replay.json").exists()
+
+
+def test_a_seat_that_never_connects_passes_and_is_flagged(tmp_path, monkeypatch):
+    module, work = load_server(tmp_path, base_game_config(), monkeypatch)
+    seat_all(module, ["steward"] * 6)
+    module.session.connected_ever.discard(5)
+    module.session.registrations.pop(5, None)
+    asyncio.run(module._play_game())
+
+    payload = json.loads((work / "results.json").read_bytes().decode("utf-8"))
+    assert payload["reason"] == "complete"
+    assert payload["disconnected"] == [False] * 5 + [True]
+    assert payload["scores"][5] == pytest.approx(0.0)
+    replay = json.loads((work / "replay.json").read_bytes().decode("utf-8"))
+    assert any(event["kind"] == "no_submission" and event["slot"] == 5
+               for event in replay["events"])
+
+
+def test_a_player_sent_decision_overrides_the_game_side_one(tmp_path, monkeypatch):
+    module, work = load_server(
+        tmp_path, base_game_config(rounds=1, min_round_seconds=0.6), monkeypatch
+    )
+    seat_all(module, ["steward"] * 6)
+
+    async def drive() -> None:
+        episode = asyncio.create_task(module._play_game())
+        await asyncio.sleep(0.1)   # inside round 0, before its deadline
+        module.session.player_decisions[0] = {"type": "decision", "harvest": 3, "clean": 0}
+        await episode
+
+    asyncio.run(drive())
+
+    replay = json.loads((work / "replay.json").read_bytes().decode("utf-8"))
+    decision = replay["rounds"][0]["decisions"][0]
+    assert decision["src"] == "player"
+    assert decision["harvest"] == 3
+
+
+def test_the_registration_default_is_a_steward_not_a_disconnect(tmp_path, monkeypatch):
+    module, work = load_server(tmp_path, base_game_config(rounds=2), monkeypatch)
+    module.session.connected_ever.update(range(6))     # connected, never registered
+    asyncio.run(module._play_game())
+
+    replay = json.loads((work / "replay.json").read_bytes().decode("utf-8"))
+    assert all(
+        decision["src"] == "scripted:steward"
+        for decision in replay["rounds"][0]["decisions"]
+    )
+
+
+def test_the_environment_is_left_clean(monkeypatch):
+    # A guard on the fixture above rather than on the game: a leaked
+    # COGAME_CONFIG_URI would make an unrelated import pick up a stale episode.
+    assert "COGAME_CONFIG_URI" not in os.environ or os.environ["COGAME_CONFIG_URI"]

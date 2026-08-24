@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Commons Family — Replay</title>
+<link rel="stylesheet" href="./chrome.css">
+</head>
+<body>
+<div id="layout">
+  <div id="stage">
+    <div id="topband">
+      <div id="wordmark">COMMONS<span>FAMILY</span></div>
+      <div id="clock">ROUND 0</div>
+      <div id="topright">
+        <span id="statuschip">replay</span>
+        <button id="feedtoggle">LOG »</button>
+      </div>
+    </div>
+    <div id="scorebug"></div>
+    <!-- ================================================================
+         commons-family additions to the inherited cogame-bullwhip chrome
+         Two nodes, both OUTSIDE #transport and OUTSIDE #board-wrap, and no
+         starter element removed: #modulebar carries the module name and the
+         resource readout chips, #patchgrid the six Commons Harvest patch
+         cards (hidden in the other three modules). The only functions this
+         block declares are cfModuleBar and cfPatchGrid — renderer.js calls
+         them by name off `window`, and neither collides with anything the
+         renderer exports or uses as a global.
+         ================================================================ -->
+    <div id="modulebar"></div>
+    <div id="patchgrid"></div>
+    <!-- end commons-family additions -->
+    <div id="board-wrap">
+      <canvas id="table" width="960" height="640"></canvas>
+      <div id="lightpool"></div>
+      <div id="grain"></div>
+      <div id="endscreen"></div>
+    </div>
+    <div id="transport">
+      <div class="scrub" id="scrub"></div>
+      <div class="tbar">
+        <button class="tbtn" id="play">❚❚</button>
+        <span class="tpos" id="pos">0 / 0</span>
+      </div>
+    </div>
+    </div>
+  <div id="feed"></div>
+</div>
+<div id="loading">LOADING REPLAY…</div>
+<script src="./renderer.js"></script>
+<script src="./commons_family_replay.js"></script>
+<script src="./static_replay.js"></script>
+<script>
+  var canvas = document.getElementById("table");
+  function fit() {
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
+  }
+  // --band and --hudscale are written on :root by relayout() and nowhere
+  // else; every other rule that needs the transport height or the embedded
+  // scale reads them from there.
+  function relayout() {
+    fit();
+    var transport = document.getElementById("transport");
+    var band = transport ? transport.getBoundingClientRect().height : 0;
+    var width = document.documentElement.clientWidth || 960;
+    var hud = Math.max(0.75, Math.min(1, width / 960));
+    document.documentElement.style.setProperty("--band", Math.round(band) + "px");
+    document.documentElement.style.setProperty("--hudscale", hud.toFixed(3));
+  }
+  window.addEventListener("resize", relayout);
+  window.addEventListener("load", relayout);
+  relayout();
+  CommonsRenderer.bindFeedToggle(document.getElementById("feedtoggle"), true);
+  // attach happens in static_replay.js once the wasm module loads
+</script>
+<script>
+  // ================================================================
+  // commons-family additions to the inherited cogame-bullwhip chrome
+  // ================================================================
+  function cfModuleBar(state) {
+    var bar = document.getElementById("modulebar");
+    if (!bar || !state) return;
+    var res = state.resource || {};
+    var titles = {
+      cleanup: "CLEAN UP",
+      harvest: "COMMONS HARVEST",
+      allelopathic: "ALLELOPATHIC HARVEST",
+      mushrooms: "EXTERNALITY MUSHROOMS"
+    };
+    var chips = [];
+    function chip(label, value, tone) {
+      chips.push('<span class="cf-chip' + (tone ? " " + tone : "") + '">' +
+        '<b>' + label + "</b>" + value + "</span>");
+    }
+    if (state.module === "cleanup") {
+      chip("apples ", (res.apples === undefined ? "–" :
+        Math.round(res.apples * 10) / 10));
+      chip("pollution ", Math.round((res.pollution || 0) * 100) + "%",
+        (res.pollution || 0) > 0.5 ? "bad" : "");
+      chip("dies below ", res.collapse_threshold === undefined ? "–" :
+        res.collapse_threshold, res.dead ? "bad" : "");
+      if (res.dead) chip("", "ORCHARD DEAD", "bad");
+    } else if (state.module === "harvest") {
+      var patches = res.patches || [];
+      var alive = 0;
+      var stock = 0;
+      patches.forEach(function (p) {
+        if (!p.dead) { alive += 1; stock += p.stock || 0; }
+      });
+      chip("rights ", res.property_rights || "open");
+      chip("apples ", Math.round(stock * 10) / 10);
+      chip("patches alive ", alive + " / " + patches.length,
+        alive < patches.length ? "bad" : "");
+    } else if (state.module === "allelopathic") {
+      var planted = res.planted || {};
+      var ripe = res.ripe || {};
+      ["red", "green", "blue"].forEach(function (c) {
+        chip(c + " ", (planted[c] || 0) + " slots · " +
+          (Math.round((ripe[c] || 0) * 10) / 10) + " ripe");
+      });
+    } else if (state.module === "mushrooms") {
+      var counts = res.counts || {};
+      ["red", "green", "blue"].forEach(function (c) {
+        chip(c + " ", Math.round(counts[c] || 0));
+      });
+    }
+    var html = '<span class="cf-module">' +
+      (titles[state.module] || String(state.module || "")) + "</span>" +
+      chips.join("");
+    if (bar.dataset.html !== html) {
+      bar.dataset.html = html;
+      bar.innerHTML = html;
+    }
+  }
+
+  function cfPatchGrid(state) {
+    var grid = document.getElementById("patchgrid");
+    if (!grid || !state) return;
+    if (!state.module || state.module !== "harvest") {
+      if (grid.dataset.html !== "") { grid.dataset.html = ""; grid.innerHTML = ""; }
+      grid.style.display = "none";
+      return;
+    }
+    grid.style.display = "";
+    var patches = (state.resource || {}).patches || [];
+    var html = patches.map(function (p) {
+      var holders = (p.holders || []).join(" + ");
+      return '<div class="cf-patch' + (p.dead ? " dead" : "") + '">' +
+        '<span class="cf-patch-id">' + p.id + "</span>" +
+        '<span class="cf-patch-stock">' +
+        (p.dead ? "†" : Math.round((p.stock || 0) * 10) / 10) + "</span>" +
+        '<span class="cf-patch-holders">' + (holders || "open") + "</span>" +
+        "</div>";
+    }).join("");
+    if (grid.dataset.html !== html) {
+      grid.dataset.html = html;
+      grid.innerHTML = html;
+    }
+  }
+</script>
+</body>
+</html>
