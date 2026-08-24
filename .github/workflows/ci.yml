@@ -229,6 +229,55 @@ jobs:
             --timeout 90 \
             --strict-text-bounds
 
+      # -----------------------------------------------------------------
+      # The WORST-CASE TEXT fixture. The step above loads the replay
+      # docker-smoke produced, and that episode runs with no
+      # ANTHROPIC_API_KEY: every seat plays a scripted baseline and the
+      # longest remark in it is 40 runes. The cap the server enforces is 140,
+      # and in a hosted episode those runes are written by a model -- so the
+      # speech bubbles, the one piece of chrome that exists to show what a
+      # model said, are untested by every gate above (cogchemists 2026-08-24:
+      # four bubbles at a negative y, four white slivers, everything green).
+      #
+      # tools/ci/text_fixture/index.html loads the REAL client/renderer.js and
+      # hands it a full-cap remark on every seat at once -- Latin, one unbroken
+      # 140-rune word, CJK, surrogate-pair emoji -- over each of the four
+      # module boards at five canvas sizes down to 360 px, and asserts its own
+      # strings are still full length and that every rune of them came back out
+      # of a fillText call with no ellipsis. --strict-text-bounds fails the job
+      # on any string that never landed inside the canvas.
+      # -----------------------------------------------------------------
+      - name: Render the worst-case text fixture in a real browser
+        run: |
+          set -euo pipefail
+          fixture="$PWD/dist/text-fixture"
+          rm -rf "${fixture}"
+          mkdir -p "${fixture}/assets" "$PWD/dist/text-fixture-out"
+          cp tools/ci/text_fixture/index.html "${fixture}/index.html"
+          cp client/renderer.js "${fixture}/renderer.js"
+          cp data/*.png "${fixture}/assets/"
+          # --bundle wants a replay on the command line; the fixture's frame is
+          # synthetic by design (no replay CI can produce carries model text),
+          # so it ignores ?replay= and this is only what the harness serves.
+          printf '{}' > "${fixture}/unused.json"
+          node tools/ci/viewer_smoke.mjs \
+            --bundle "${fixture}" \
+            --replay "${fixture}/unused.json" \
+            --timeout 90 \
+            --strict-text-bounds \
+            --out "$PWD/dist/text-fixture-out"
+
+      - name: Upload the worst-case text evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: text-fixture-smoke
+          path: |
+            dist/text-fixture-out/viewer-smoke.png
+            dist/text-fixture-out/viewer-smoke.json
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Upload the viewer smoke evidence
         # Always: the screenshot and the JSON are most useful when the job is red.
         if: always()

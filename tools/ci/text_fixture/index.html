@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>commons-family — worst-case renderer fixture</title>
+<!--
+  THE WORST-CASE RENDERER FIXTURE (acceptance checklist item 15).
+
+  Everything else in CI loads a replay `docker_smoke.sh` produced, and that
+  episode runs with no ANTHROPIC_API_KEY: every seat plays a scripted baseline
+  and the longest thing anyone says is 40 runes of "Quota 1 this round; I keep
+  to it." The cap the server enforces is 140 runes, and the strings a hosted
+  episode draws are written by a model. So the whole class of chrome that
+  exists to show what a model said — the speech bubbles — is untested by every
+  other gate (cogchemists, 2026-08-24: four bubbles drawn at a negative y, four
+  white slivers on screen, every check green).
+
+  This page loads the REAL client/renderer.js and hands it a frame built to
+  hurt: a full-cap remark on EVERY seat at once, in Latin text, in a single
+  unbroken 140-rune word, in CJK, in surrogate-pair emoji — rendered over each
+  of the four module boards at five canvas sizes down to the 360 px the
+  softmax.com featured-match iframe is. `tools/ci/viewer_smoke.mjs
+  --strict-text-bounds` drives it and fails on any string that never landed
+  inside the canvas.
+
+  The fixture asserts its OWN strings too: every remark is still exactly 140
+  runes when it is handed to the renderer, and every rune of it comes back out
+  of a fillText call with no ellipsis anywhere. One quietly shortened remark
+  would leave this page passing while testing nothing.
+
+  It ignores ?replay=: its frame is synthetic on purpose, because no replay CI
+  can produce carries model text.
+-->
+<style>
+  html, body { margin: 0; background: #16110d; }
+  #board { display: block; }
+  #note { color: #f2e8d8; font: 12px system-ui, sans-serif; padding: 6px 10px; }
+</style>
+</head>
+<body>
+<canvas id="board" width="960" height="600"></canvas>
+<div id="note">worst-case text fixture — running…</div>
+
+<script>
+// The renderer sets data-replay-loaded="true" at the end of attachReplay, and
+// viewer_smoke.mjs stops watching the moment it sees it. Hold that write until
+// every phase below has been rendered and checked; then set it here, or set
+// data-replay-error and let the smoke fail.
+window.__fixtureGate = true;
+(function () {
+  var realSet = Element.prototype.setAttribute;
+  Element.prototype.setAttribute = function (name, value) {
+    if (window.__fixtureGate && this === document.documentElement &&
+        name === "data-replay-loaded") {
+      return undefined;
+    }
+    return realSet.apply(this, arguments);
+  };
+})();
+
+// Every string the renderer draws, in draw order, for the current phase.
+window.__drawn = [];
+(function () {
+  var proto = CanvasRenderingContext2D.prototype;
+  ["fillText", "strokeText"].forEach(function (name) {
+    var real = proto[name];
+    proto[name] = function (text, x, y) {
+      window.__drawn.push(String(text));
+      return real.apply(this, arguments);
+    };
+  });
+})();
+</script>
+
+<script src="./renderer.js"></script>
+
+<script>
+(function () {
+  "use strict";
+
+  var CAP = 140;                       // the engine's chat_max_chars default
+  var SIZES = [[360, 640], [360, 400], [480, 320], [960, 600], [1280, 800]];
+  var MODULES = ["cleanup", "harvest", "allelopathic", "mushrooms"];
+
+  function runes(text) { return Array.from(text); }
+
+  function capped(text) {
+    // Exactly CAP runes, the way `truncate_runes` would leave it.
+    var out = runes(text);
+    while (out.length < CAP) out = out.concat(runes(text));
+    return out.slice(0, CAP).join("");
+  }
+
+  // Six remarks, one per seat, each exactly 140 runes and each hard in a
+  // different way.
+  var SAYINGS = [
+    capped("I will hold my quota at one apple this round and I expect the " +
+           "rest of you to do the same, or the river silts up and we all get " +
+           "nothing at all from it."),
+    capped("supercalifragilisticexpialidociousandthensomemorewordsjammedright" +
+           "togetherwithnospacesanywhereatallsothelinehastobebrokenbyhand"),
+    capped("我们必须一起清理这条河否则果园就会枯死请每个人每轮都留一个单位来清理"),
+    capped("🍎🌊🤖 keep the orchard alive 🍏 one unit each 🌱 nobody strips " +
+           "a patch 🚫 and we all still eat next round 🍎🍏🌊"),
+    capped("QUOTA: 1. PLANT: green. SANCTION: none — unless Cog-D takes " +
+           "three again, in which case I will pay one to burn three, and I " +
+           "will say so first."),
+    capped("Blue pays everyone but me, which is exactly why I am eating it; " +
+           "if all six of us reason that way the patch feeds the whole table " +
+           "every single round.")
+  ];
+
+  function resourceFor(module) {
+    if (module === "harvest") {
+      return {
+        kind: "harvest", property_rights: "partnership", patch_capacity: 20,
+        patch_regrowth: 0.4, dead_patches: [4],
+        patches: [0, 1, 2, 3, 4, 5].map(function (id) {
+          return { id: id, stock: 20 - id * 3, dead: id === 4,
+            holders: ["Cog-A", "Cog-B"] };
+        })
+      };
+    }
+    if (module === "allelopathic") {
+      return { kind: "allelopathic", field_size: 60,
+        planted: { red: 22, green: 20, blue: 18 },
+        ripe: { red: 9.5, green: 8.25, blue: 7.75 }, barren: false };
+    }
+    if (module === "mushrooms") {
+      return { kind: "mushrooms", capacity: 30,
+        counts: { red: 15, green: 15, blue: 15 }, spawn_per_round: 3 };
+    }
+    return { kind: "cleanup", apples: 98.6, capacity: 100, pollution: 0.62,
+      collapse_threshold: 10, dead: false };
+  }
+
+  function seat(slot) {
+    return {
+      slot: slot, alias: "Cog-" + "ABCDEF"[slot],
+      name: "commons-family-champion-" + slot,
+      score: 123.4 + slot, gain: 2.5, extracted: 44.25, public_effort: 12,
+      favorite: ["red", "green", "blue"][slot % 3], frozen: slot === 5,
+      patches: [slot], disconnected: false, pending: slot === 3,
+      say: SAYINGS[slot]
+    };
+  }
+
+  var EVENTS = [
+    { kind: "episode_start", r: 0, text: "6 cogs, 20 rounds, one commons." },
+    { kind: "round_open", r: 0, text: "Round 1 of 20 — everyone decides at once." },
+    { kind: "chat", r: 0, slot: 0, alias: "Cog-A", message: SAYINGS[0],
+      text: "Cog-A says: " + SAYINGS[0] },
+    { kind: "resolve", r: 0, extracted: 9.5, text: "9.5 taken." },
+    { kind: "round_end", r: 0, text: "Round 1 settled." }
+  ];
+
+  function makeStates() {
+    return EVENTS.map(function (event, index) {
+      return {
+        r: 0, rounds: 20, module: "cleanup",
+        phase: index >= 4 ? "settled" : "open", done: false, reason: "",
+        seats: [0, 1, 2, 3, 4, 5].map(seat),
+        resource: resourceFor("cleanup"),
+        series: { total: [98.6, 92.1, 88.0, 81.4], maintenance: [0.3, 0.42, 0.55, 0.62] },
+        flow: [{ from: 5, to: 0, amount: 0.6, kind: "blue" },
+               { from: 5, to: 1, amount: 0.6, kind: "blue" }]
+      };
+    });
+  }
+
+  var states = makeStates();
+  var payload = {
+    type: "replay", protocol: "commons-family.replay.v1", module: "cleanup",
+    names: states[0].seats.map(function (s) { return s.alias; }),
+    policyNames: states[0].seats.map(function (s) { return s.name; }),
+    seats: states[0].seats,
+    config: { num_agents: 6, rounds: 20, chat_max_chars: CAP },
+    events: EVENTS, results: { reason: "complete", rounds: 20 },
+    states: states
+  };
+
+  var canvas = document.getElementById("board");
+  var note = document.getElementById("note");
+  var failures = [];
+
+  function fail(message) {
+    failures.push(message);
+    note.textContent = "FAIL: " + failures.join(" | ");
+  }
+
+  function frames(count, done) {
+    if (count <= 0) { done(); return; }
+    requestAnimationFrame(function () { frames(count - 1, done); });
+  }
+
+  function check(phase) {
+    var drawn = window.__drawn.slice();
+    if (!drawn.length) {
+      fail(phase + ": the renderer drew no text at all");
+      return;
+    }
+    var ellipsized = drawn.filter(function (line) { return /\u2026\s*$/.test(line); });
+    if (ellipsized.length) {
+      fail(phase + ": ellipsized " + JSON.stringify(ellipsized.slice(0, 3)));
+    }
+    var flat = drawn.join("").replace(/\s+/g, "");
+    SAYINGS.forEach(function (text, slot) {
+      if (runes(text).length !== CAP) {
+        fail(phase + ": remark " + slot + " is " + runes(text).length +
+          " runes, not " + CAP + " — the fixture shortened its own string");
+        return;
+      }
+      if (flat.indexOf(text.replace(/\s+/g, "")) < 0) {
+        fail(phase + ": seat " + slot + "'s remark was not drawn in full");
+      }
+    });
+  }
+
+  var phases = [];
+  MODULES.forEach(function (module) {
+    SIZES.forEach(function (size) {
+      phases.push({ module: module, size: size });
+    });
+  });
+
+  function runPhase(index) {
+    if (index >= phases.length) {
+      window.__fixtureGate = false;
+      if (failures.length) {
+        document.documentElement.setAttribute("data-replay-error",
+          failures.slice(0, 4).join(" | "));
+        return;
+      }
+      note.textContent = "worst-case text fixture: " + phases.length +
+        " phases, 6 full-cap remarks each, all drawn in full";
+      document.documentElement.setAttribute("data-replay-loaded", "true");
+      return;
+    }
+    var phase = phases[index];
+    states.forEach(function (state) {
+      state.module = phase.module;
+      state.resource = resourceFor(phase.module);
+    });
+    canvas.width = phase.size[0];
+    canvas.height = phase.size[1];
+    // Two frames to settle at the new size, then collect a clean one.
+    frames(2, function () {
+      window.__drawn = [];
+      frames(2, function () {
+        check(phase.module + " @ " + phase.size[0] + "x" + phase.size[1]);
+        runPhase(index + 1);
+      });
+    });
+  }
+
+  // The renderer is only ready once its sprites have loaded (or 404ed), so
+  // wait for the first drawn frame rather than a fixed number of frames.
+  function whenDrawing(attempts, done) {
+    if (window.__drawn.length) { done(); return; }
+    if (attempts <= 0) {
+      fail("the renderer never drew a frame");
+      window.__fixtureGate = false;
+      document.documentElement.setAttribute("data-replay-error", failures[0]);
+      return;
+    }
+    requestAnimationFrame(function () { whenDrawing(attempts - 1, done); });
+  }
+
+  window.CommonsRenderer.attachReplay({
+    canvas: canvas,
+    assetBase: "./assets",
+    payload: payload
+  });
+  whenDrawing(600, function () { runPhase(0); });
+})();
+</script>
+</body>
+</html>

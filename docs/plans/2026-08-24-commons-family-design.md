@@ -930,6 +930,21 @@ The four surgical edits to the copied chrome, and nothing else:
 - **Legible at 360 px wide.** The softmax.com featured-match iframe is about that wide, so the
   scorebug, clock, chart and feed are checked at 360 px, not at desktop width, and
   `viewer-smoke.png` is the evidence.
+- **The say band, and the worst-case text fixture.** A seat's remark is model-authored text drawn
+  on the canvas, and the server caps it at `chat_max_chars = 140` runes. The layout **reserves a
+  band for it above the cog row**, sized from that cap in the bubble's own font (`sayMetrics()` in
+  `renderer.js`) and reserved whether or not anyone is speaking, so the board does not jump when a
+  remark lands; the bubble wraps to as many lines as the text needs and a word wider than the box
+  is broken on rune boundaries. **A remark is never ellipsized** — ellipsis is for a label, and
+  when the band would take more than 45 % of the frame the font shrinks instead of the text.
+  Because every replay CI can produce is written by scripted baselines (no `ANTHROPIC_API_KEY`, so
+  the longest thing anyone says is 40 runes), that path is exercised by a **worst-case renderer
+  fixture**: `tools/ci/text_fixture/index.html` loads the real `client/renderer.js` and hands it a
+  full-cap remark on **every** seat at once — Latin, one unbroken 140-rune word, CJK,
+  surrogate-pair emoji — over each of the four module boards at five canvas sizes down to 360 px.
+  It asserts its own strings are still 140 runes and that every rune of them came back out of a
+  `fillText` call with no ellipsis, and `ci.yml`'s own step drives it with
+  `viewer_smoke.mjs --strict-text-bounds`, whose `canvas_text` line is the evidence.
 
 ---
 

@@ -365,6 +365,38 @@ def test_the_module_bar_reads_keys_the_module_actually_publishes(module_name):
         assert f"res.{key}" in body or f'"{key}"' in body or f"(res.{key}" in body, key
 
 
+def test_the_worst_case_text_fixture_is_shipped_and_driven_by_ci():
+    """The gate that covers model-authored text, and CI's own use of it.
+
+    Every replay CI can produce is text-free in the sense that matters: the
+    smoke episode runs with no ANTHROPIC_API_KEY, so every seat plays a
+    scripted baseline and the longest remark in it is 40 runes of a fixed
+    string. The fixture is the only thing that draws a full-cap remark, and a
+    fixture nothing runs is not a gate.
+    """
+    fixture = ROOT / "tools/ci/text_fixture/index.html"
+    body = read(fixture)
+    assert "./renderer.js" in body
+    assert "CommonsRenderer.attachReplay" in body
+    assert 'setAttribute("data-replay-loaded", "true")' in body
+    assert 'setAttribute("data-replay-error"' in body
+    # It asserts its own strings are full length: one quietly shortened remark
+    # would leave it passing while testing nothing.
+    assert "var CAP = 140;" in body
+    assert CommonsConfig().chat_max_chars == 140
+    assert "the fixture shortened its own string" in body
+    assert "was not drawn in full" in body
+    assert body.count("[360, 640]") == 1        # the embedded featured-match width
+
+    workflow = read(ROOT / ".github/workflows/ci.yml")
+    step = workflow[workflow.index("Render the worst-case text fixture"):]
+    step = step[:step.index("Upload the worst-case text evidence")]
+    assert "tools/ci/text_fixture/index.html" in step
+    assert "client/renderer.js" in step
+    assert "--strict-text-bounds" in step
+    assert "continue-on-error" not in step
+
+
 def test_the_bundle_carries_the_renderer_the_css_and_the_board_art():
     hook = read(ROOT / "tools/build_replay_viewer.sh")
     for asset in ("renderer.js", "chrome.css", "index.html", "static_replay.js"):
