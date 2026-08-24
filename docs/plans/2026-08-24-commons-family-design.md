@@ -247,9 +247,12 @@ so there is no permanent death in this module).
    `gain_j += 3.0×k/(N−1)`.
 4. `k_i = Σ_c eaten_{i,c}`; if `k_i > 0` then `frozen_until_i = r + ceil(k_i)`.
 
-**Step 7, `mushrooms`:** `eaten_total[c] +=` this round's total per colour; `w[c] = 1 + eaten_total[c]`;
-apportion `spawn_per_round = 3` by largest remainder (ties canonical); `count[c] += alloc[c]`;
-clamp each colour to 15 and the total to 30, dropping excess from the largest colour first.
+**Step 7, `mushrooms`:** `w[c] = 1 + eaten_total[c]`; apportion `spawn_per_round = 3` by largest
+remainder (ties canonical); `count[c] += alloc[c]`; clamp each colour to 15 and the total to 30,
+dropping excess from the largest colour first. `eaten_total[c] +=` this round's total per colour is
+booked in **step 5**, where the eating happens and the numbers are in hand, and step 7 reads the
+already-updated totals — the spawn weights are exactly the same either way, and the accumulator
+lives next to the thing it counts. `tests/test_modules.py` asserts the totals after `resolve`.
 
 ### Scoring, sign, and what the league ranks by
 
