@@ -56,6 +56,19 @@
   var ROUND_MS = 900;
   var FLOW_MS = 1200;
   var BUBBLE_HOLD_MS = 6000;
+  // The cap the SERVER enforces on a `message` (`chat_max_chars`, engine
+  // default 140 runes). The say band is sized from this, not from whatever
+  // happens to be on screen, so the board does not jump when a remark lands
+  // and a full-cap remark from every seat at once has somewhere to go. The
+  // replay's own config overrides it (`view.sayCap`).
+  var SAY_CAP_RUNES = 140;
+  // A representative line, measured in the bubble font to turn the rune cap
+  // into a width. Latin text: a remark in wider glyphs needs more lines than
+  // the band reserves and the bubble grows into the board above rather than
+  // being cut — a sentence is never ellipsized.
+  var SAY_SAMPLE = "the quick brown fox jumps over a lazy dog, and 0123456789.";
+  var BUBBLE_FONT =
+    "px -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif";
 
   function assetUrl(base, name) {
     return base.replace(/\/$/, "") + "/" + name;
@@ -153,20 +166,58 @@
   // Three stacked bands: the commons, the cog row, the chart. Everything is
   // measured from the frame, so the whole arena always fits whatever size the
   // viewer is embedded in — there is nothing to pan and nothing to zoom.
-  function computeLayout(width, height) {
+  function computeLayout(width, height, sayBand) {
     var margin = 8;
     var chartH = Math.max(58, Math.min(height * 0.24, 150));
     var cogH = Math.max(52, Math.min(height * 0.24, 118));
     var boardTop = margin;
-    var boardH = Math.max(40, height - chartH - cogH - margin * 2);
+    var band = Math.max(0, sayBand || 0);
+    var boardH = Math.max(40, height - chartH - cogH - band - margin * 2);
     var scale = Math.max(0.55, Math.min(1.25, width / 960));
     return {
       width: width, height: height, margin: margin, scale: scale,
       board: { x: margin, y: boardTop, w: width - margin * 2, h: boardH },
-      cogs: { x: margin, y: boardTop + boardH, w: width - margin * 2, h: cogH },
+      // The say band: reserved whether or not anyone is speaking, sized from
+      // the server's rune cap in the font the bubbles are drawn in.
+      say: { x: margin, y: boardTop + boardH, w: width - margin * 2, h: band },
+      cogs: { x: margin, y: boardTop + boardH + band, w: width - margin * 2,
+        h: cogH },
       chart: { x: margin, y: height - chartH - margin, w: width - margin * 2,
         h: chartH }
     };
+  }
+
+  // How much room a full-cap remark on EVERY seat needs, measured rather than
+  // guessed: one bubble per seat side by side, the cap turned into a line count
+  // through the average glyph width of `SAY_SAMPLE` in the bubble font. When
+  // that band would eat more than 45 % of the frame the FONT shrinks (down to
+  // 6 px), never the text.
+  function sayMetrics(ctx, width, height, seats, cap) {
+    var n = Math.max(1, seats || 6);
+    var scale = Math.max(0.55, Math.min(1.25, width / 960));
+    var column = Math.max(40, Math.min(width - 12, (width - 16) / n - 4));
+    var runes = Math.max(1, cap || SAY_CAP_RUNES);
+    var ceiling = Math.max(28, height * 0.45);
+    var size = 10.5 * scale;
+    var pad = 5 * scale;
+    var lineH = 0;
+    var lines = 1;
+    var band = 0;
+    ctx.save();
+    while (true) {
+      ctx.font = size.toFixed(1) + BUBBLE_FONT;
+      var per = ctx.measureText(SAY_SAMPLE).width / SAY_SAMPLE.length;
+      var usable = Math.max(8, column - pad * 2);
+      lineH = size * 1.15;
+      // +1 line: words do not divide evenly into lines.
+      lines = Math.ceil((runes * per) / usable) + 1;
+      band = lines * lineH + pad * 2;
+      if (band <= ceiling || size <= 6) break;
+      size -= 0.5;
+    }
+    ctx.restore();
+    return { font: size, lineH: lineH, pad: pad, column: column,
+      lines: lines, band: Math.ceil(band) };
   }
 
   // ---- Drawing -------------------------------------------------------------
@@ -175,7 +226,9 @@
     var w = canvas.width;
     var h = canvas.height;
     if (!w || !h) return;
-    var L = computeLayout(w, h);
+    var say = sayMetrics(ctx, w, h, (view.seats || []).length,
+      view.sayCap || SAY_CAP_RUNES);
+    var L = computeLayout(w, h, say.band);
     var resource = view.resource || {};
     var fx = view.effects || {};
     var now = view.now || Date.now();
@@ -208,7 +261,7 @@
       default: drawOrchard(ctx, images, L, resource); break;
     }
 
-    drawCogRow(ctx, images, L, view, now, fx);
+    drawCogRow(ctx, images, L, view, now, fx, say);
     if (view.module === "mushrooms") {
       drawFlow(ctx, L, view, now, fx);
     }
@@ -515,7 +568,7 @@
     return { x: L.cogs.x + pitch * (slot + 0.5), y: L.cogs.y + L.cogs.h * 0.46 };
   }
 
-  function drawCogRow(ctx, images, L, view, now, fx) {
+  function drawCogRow(ctx, images, L, view, now, fx, say) {
     var seats = view.seats || [];
     if (!seats.length) return;
     var pitch = L.cogs.w / seats.length;
@@ -572,17 +625,34 @@
         var alpha = sayAge < BUBBLE_HOLD_MS ? 1 :
           Math.max(0.4, 1 - (sayAge - BUBBLE_HOLD_MS) / 4000);
         drawBubble(ctx, centre.x, centre.y - size * 0.62 - 14 * L.scale,
-          seat.say, pitch * 1.5, L.scale, alpha);
+          seat.say, say, alpha);
       }
     });
     void ROUND_MS;
   }
 
+  // `maxLines` is a cap for LABELS. Pass 0 for a sentence: it wraps to as many
+  // lines as the text needs, and a word wider than the box is broken on RUNE
+  // boundaries (never mid-surrogate) instead of being ellipsized. Ellipsis is
+  // right for a card name in a 52 px card and wrong for a remark — there the
+  // box is what has to give.
   function wrapLines(ctx, text, maxWidth, maxLines) {
     var words = String(text).split(/\s+/);
     var lines = [];
     var line = "";
     words.forEach(function (word) {
+      while (ctx.measureText(word).width > maxWidth) {
+        if (line) { lines.push(line); line = ""; }
+        var runes = Array.from(word);
+        var cut = 1;
+        while (cut < runes.length &&
+               ctx.measureText(runes.slice(0, cut + 1).join("")).width <= maxWidth) {
+          cut += 1;
+        }
+        lines.push(runes.slice(0, cut).join(""));
+        word = runes.slice(cut).join("");
+        if (!word) return;
+      }
       var probe = line ? line + " " + word : word;
       if (ctx.measureText(probe).width > maxWidth && line) {
         lines.push(line);
@@ -592,43 +662,44 @@
       }
     });
     if (line) lines.push(line);
-    var overflow = lines.length > maxLines;
-    lines = lines.slice(0, maxLines);
-    if (overflow && lines.length) {
-      lines[lines.length - 1] = ellipsize(ctx, lines[lines.length - 1] + "…",
-        maxWidth);
-    }
-    return lines.map(function (l) { return ellipsize(ctx, l, maxWidth); });
+    if (!maxLines || lines.length <= maxLines) return lines;
+    var kept = lines.slice(0, maxLines);
+    kept[kept.length - 1] = ellipsize(ctx, kept[kept.length - 1] + "…", maxWidth);
+    return kept;
   }
 
-  // The bubble reserves its own band: it is measured first and its box is
-  // clamped into the frame, so a cog near the top edge pushes its line DOWN
-  // instead of drawing it at a negative y where nothing can see it.
-  function drawBubble(ctx, x, bottom, text, maxW, scale, alpha) {
+  // The bubble is drawn into the band `sayMetrics` reserved above the cog row:
+  // the band is sized from the server's rune cap in this font, so a full-cap
+  // remark on every seat at once wraps to lines that fit instead of being cut
+  // to two and ellipsized. The box is still clamped into the frame, so a cog
+  // near an edge pushes its bubble back INSIDE rather than drawing it at a
+  // negative coordinate where nothing can see it (cogchemists, 2026-08-24).
+  function drawBubble(ctx, x, bottom, text, say, alpha) {
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.font = Math.round(10.5 * scale) +
-      "px -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif";
-    var pad = 5 * scale;
-    var lineH = 12 * scale;
-    var width = Math.max(40, Math.min(maxW, ctx.canvas.width - 12));
-    var lines = wrapLines(ctx, text, width - pad * 2, 2);
+    ctx.font = say.font.toFixed(1) + BUBBLE_FONT;
+    var pad = say.pad;
+    var lineH = say.lineH;
+    var width = Math.max(40, Math.min(say.column, ctx.canvas.width - 12));
+    var lines = wrapLines(ctx, text, width - pad * 2, 0);
     var bw = 0;
     lines.forEach(function (l) { bw = Math.max(bw, ctx.measureText(l).width); });
     bw = Math.min(width, bw + pad * 2);
-    var bh = lines.length * lineH + pad * 2 - 2;
+    var bh = lines.length * lineH + pad * 2;
     var bx = Math.max(3, Math.min(x - bw / 2, ctx.canvas.width - bw - 3));
-    var by = Math.max(3, Math.min(bottom - bh - 5 * scale,
+    var by = Math.max(3, Math.min(bottom - bh - pad,
       ctx.canvas.height - bh - 3));
     ctx.shadowColor = "rgba(0,0,0,0.6)";
     ctx.shadowBlur = 5;
     ctx.fillStyle = PAPER;
-    roundRect(ctx, bx, by, bw, bh, 4 * scale);
+    roundRect(ctx, bx, by, bw, bh, Math.min(4, pad));
     ctx.fill();
     ctx.shadowColor = "transparent";
     ctx.fillStyle = INK;
     lines.forEach(function (l, i) {
-      paint(ctx, l, bx + pad, by + pad + i * lineH, "left", INK);
+      // `paint`'s y is the baseline: one line height in, so the ascenders sit
+      // inside the box rather than over its top edge.
+      paint(ctx, l, bx + pad, by + pad + i * lineH + say.font * 0.85, "left", INK);
     });
     ctx.restore();
   }

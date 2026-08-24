@@ -208,6 +208,36 @@ def test_every_seek_dismisses_the_endcard():
     assert "setIndex(next, true)" in seek
 
 
+def test_the_say_band_is_reserved_and_sized_from_the_servers_rune_cap():
+    """A remark gets a band, not whatever room is left above the cog.
+
+    `drawBubble` used to wrap into a hard TWO lines and ellipsize the rest, at
+    a width of `pitch * 1.5` — about 86 px in a 360 px frame, so roughly 25 of
+    a 140-rune remark's characters survived and the rest became "…". The band
+    is now computed from `chat_max_chars` in the bubble's own font
+    (`sayMetrics`), reserved in the layout whether or not anyone is speaking,
+    and the bubble wraps to as many lines as the text needs.
+    """
+    renderer = read(RENDERER)
+    assert f"var SAY_CAP_RUNES = {CommonsConfig().chat_max_chars};" in renderer
+    assert "function sayMetrics(" in renderer
+    # The band is part of the layout, and the board is measured after it.
+    layout = renderer[renderer.index("function computeLayout("):
+                      renderer.index("function sayMetrics(")]
+    assert "sayBand" in layout
+    assert "say: {" in layout
+    assert "computeLayout(w, h, say.band)" in renderer
+    # No line cap for a sentence, and no ellipsis anywhere in the bubble.
+    bubble = renderer[renderer.index("function drawBubble("):]
+    bubble = bubble[:bubble.index("// ---- Chart")]
+    assert "wrapLines(ctx, text, width - pad * 2, 0)" in bubble
+    assert "ellipsize" not in bubble
+    # A word wider than the box is broken on rune boundaries, not cut.
+    wrap = renderer[renderer.index("function wrapLines("):
+                    renderer.index("function drawBubble(")]
+    assert "Array.from(word)" in wrap
+
+
 # ---------------------------------------------------------------------------
 # the scrubber beats
 # ---------------------------------------------------------------------------
