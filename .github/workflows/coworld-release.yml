@@ -1,8 +1,11 @@
 # Build -> certify -> upload policies -> upload coworld -> put secret.
 #
 # Goes to:  .github/workflows/coworld-release.yml  in the coworld repo.
-# Placeholders already substituted: commons-family (the game slug; also the Coworld name and the
-#                      secret namespace, e.g. bullwhip)
+# Placeholders already substituted: commons-family (the game slug, e.g. bullwhip).
+#             NOTE: the secret namespace is the COWORLD NAME (game.name), which
+#                      is NOT the slug here -- commons_family vs commons-family.
+#                      The "Put the Coworld secret" step reads it from the
+#                      manifest rather than assuming they are the same string.
 #             coworld-commons-family (local image name WITHOUT a tag, must match compose.yaml
 #                      minus ":latest", e.g. coworld-bullwhip)
 #
@@ -352,13 +355,23 @@ jobs:
             echo "::error::ANTHROPIC_API_KEY secret is not set on this repo (dispatch propagate-secrets.yml in Metta-AI/coworld-builder)"
             exit 1
           fi
+          # The secret namespace is the COWORLD NAME (game.name), not the slug.
+          # The template assumes they are the same string, which holds for every
+          # single-word coworld but not here: this game is `commons_family` with
+          # slug `commons-family`, and the platform rejects the manifest with
+          # "Coworld secret commons-family/anthropic_api_key cannot be used by
+          # Coworld 'commons_family'" (release 0.1.1, run 32776397495). Read the
+          # name out of the manifest so it cannot drift from the URI the
+          # runnable declares.
+          coworld_name="$(python3 -c 'import json,sys; print(json.load(open("coworld_manifest_template.json"))["game"]["name"])')"
+          echo "secret namespace: ${coworld_name}"
           secret_file="$(mktemp)"
           chmod 600 "$secret_file"
           printf '%s' "${ANTHROPIC_API_KEY}" > "$secret_file"
           uvx --from "$COWORLD_PKG" coworld secret put \
-            "$SLUG" "${SECRET_KEY_NAME}" "$secret_file"
+            "${coworld_name}" "${SECRET_KEY_NAME}" "$secret_file"
           rm -f "$secret_file"
-          uvx --from "$COWORLD_PKG" coworld secret list "$SLUG"
+          uvx --from "$COWORLD_PKG" coworld secret list "${coworld_name}"
           echo '{"ok": true}' > "$RR/secret.json"
 
       - name: Assemble release-result.json

@@ -421,6 +421,39 @@ def test_the_certification_fixture_fits_the_certifiers_local_smoke_budget():
         assert variant["game_config"]["min_round_seconds"] == 3
 
 
+def test_the_secret_uri_namespace_is_the_coworld_name_not_the_slug():
+    """The platform keys coworld secrets on `game.name`.
+
+    Every single-word coworld has `game.name == <slug>` and never notices; this
+    one is `commons_family` with slug `commons-family`, and pointing the
+    runnable at the slug namespace made the platform reject the whole manifest
+    with "Coworld secret commons-family/anthropic_api_key cannot be used by
+    Coworld 'commons_family'" (release 0.1.1, run 32776397495). Local certify
+    passes either way — only the upload sees it.
+    """
+    root = Path(__file__).resolve().parents[1]
+    manifest = json.loads((root / "coworld_manifest_template.json").read_text())
+    name = manifest["game"]["name"]
+    uri = manifest["game"]["runnable"]["env"]["ANTHROPIC_API_KEY_URI"]
+    assert uri == f"secret://coworld/{name}/anthropic_api_key"
+
+    # And the release workflow must put the secret in that same namespace.
+    workflow = (root / ".github/workflows/coworld-release.yml").read_text()
+    assert 'coworld secret put \\\n            "${coworld_name}"' in workflow
+    assert '"$SLUG" "${SECRET_KEY_NAME}"' not in workflow
+
+
+def test_the_game_runnable_declares_the_secret_at_all():
+    """Without it the hosted container never receives the key and every league
+    episode silently plays scripted — invisible to local certify (hive, 2026-08-23).
+    """
+    root = Path(__file__).resolve().parents[1]
+    manifest = json.loads((root / "coworld_manifest_template.json").read_text())
+    env = manifest["game"]["runnable"]["env"]
+    assert env["ANTHROPIC_API_KEY_URI"].startswith("secret://coworld/")
+    assert env["ANTHROPIC_API_KEY_URI"].endswith("/anthropic_api_key")
+
+
 def test_the_registration_default_is_a_steward_not_a_disconnect(tmp_path, monkeypatch):
     module, work = load_server(tmp_path, base_game_config(rounds=2), monkeypatch)
     module.session.connected_ever.update(range(6))     # connected, never registered
