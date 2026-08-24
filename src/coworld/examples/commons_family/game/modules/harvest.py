@@ -31,6 +31,13 @@ class HarvestModule(Module):
         # running; both the closed-room deal and the partnership deal come out
         # of that one permutation.
         patch_deal = list(deal["patch_deal"])
+        # `patch_deal` is a seeded permutation of the patches. With the shipped
+        # `patch_count == num_agents == 6` the modulo is the identity, so
+        # `owner` is a 1:1 permutation of seats onto patches — which is what
+        # `closed` and `partnership` mean. The modulo is what keeps it defined
+        # when a hand-edited `game_config` sets them differently: every patch
+        # still has exactly one owner and every seat's allowed set is still
+        # inside `range(patch_count)`, seats just own two patches or none.
         owner = [patch_deal[patch] % config.num_agents for patch in range(config.patch_count)]
         pairs: list[list[int]] = []
         for index in range(0, config.patch_count, 2):

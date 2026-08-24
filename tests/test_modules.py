@@ -253,6 +253,46 @@ def test_harvest_deals_are_a_public_permutation():
     assert all(len(patch["holders"]) == 1 for patch in public["patches"])
 
 
+@pytest.mark.parametrize("patch_count", [3, 6, 12])
+@pytest.mark.parametrize("rights", ["open", "closed", "partnership"])
+def test_patch_ownership_stays_defined_when_the_counts_differ(patch_count, rights):
+    """The 1:1 deal is the shipped case; the wrap is what makes the rest legal.
+
+    `owner[p] = patch_deal[p] % num_agents` is a permutation only because the
+    shipped `patch_count` equals `num_agents` (the manifest pins both, and the
+    schema pins num_agents 6..6). A hand-edited `game_config` can set
+    `patch_count` anywhere in 1..12, and every patch must still have exactly
+    one owner, every allowed set must stay inside the patch range, and the
+    episode must still play.
+    """
+    from coworld.examples.commons_family import headless  # noqa: PLC0415
+
+    config = CommonsConfig(module="harvest", num_agents=6, rounds=8,
+                           patch_count=patch_count, property_rights=rights)
+    module = module_for(config)
+    state = new_game(config)
+    owner = state.module_state["owner"]
+    assert len(owner) == patch_count
+    assert all(0 <= seat < config.num_agents for seat in owner)
+    if patch_count == config.num_agents:
+        assert sorted(owner) == list(range(config.num_agents))
+    for slot in range(config.num_agents):
+        allowed = module.allowed_patches(state.module_state, config, slot)
+        assert all(0 <= patch < patch_count for patch in allowed)
+        assert len(set(allowed)) == len(allowed)
+
+    played = headless.run_episode(
+        config,
+        headless.build_policies(["steward", "free_rider", "cleaner", "punisher",
+                                 "random", "reciprocator"]),
+    )
+    assert played.round == 8
+    for record in played.history:
+        for decision in record.decisions:
+            assert 0 <= decision["patch"] < patch_count
+            assert 0 <= decision["harvest"] <= config.effort_budget
+
+
 # ---------------------------------------------------------------------------
 # allelopathic
 # ---------------------------------------------------------------------------

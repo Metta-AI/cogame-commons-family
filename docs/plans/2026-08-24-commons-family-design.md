@@ -122,7 +122,12 @@ cap of 3 — the temptation is exactly one unit wide. `property_rights` selects 
 - `open` — any cog may name any patch.
 - `closed` — patch *p* belongs to the cog in seat `owner[p]`, a seeded 1:1 permutation of the six
   seats onto the six patches, **public** to everyone. A demand by a non-owner yields nothing and
-  writes a `trespass` event.
+  writes a `trespass` event. (The deal is `owner[p] = patch_deal[p] mod num_agents`, and it is a
+  1:1 permutation *because* every shipped variant has `patch_count == num_agents == 6` — the
+  manifest pins `num_agents` at 6..6 and `patch_count` at 6 in all six variants. The modulo is
+  what keeps a hand-edited `game_config` legal rather than merely lucky: every patch still has
+  exactly one owner and every allowed set stays inside the patch range, seats just own two patches
+  or none. A parametrised test plays 3, 6 and 12 patches through all three rights.)
 - `partnership` — the six patches are dealt to three seeded pairs, two patches per pair, **public**.
   A patch yields this round only if **both** partners named it this round (either may demand 0 —
   naming it is "holding" it). Otherwise every demand on it yields nothing and writes an `unheld`
