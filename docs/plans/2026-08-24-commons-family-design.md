@@ -529,8 +529,9 @@ The rest, each a small precise rule:
 |---|---|
 | a seat's LLM call times out (8 s) or throttles past the ladder | **retry once**, that seat only, with the hint `Your last reply was not usable. Reply with ONE JSON object beginning with { and only the fields in the schema.` |
 | reply is not JSON / has no balanced object / omits every schema field | same single retry |
-| retry also fails | that seat plays `fallback_scripted` (`steward`) for this round; `fallback` event with `cause ∈ {timeout, parse, rate_budget, transport}`; counted in `results.fallbacks[slot]` |
-| no credentials at all (offline CI, cert without a key) | the client marks itself **disabled at startup, makes zero network calls**, and every prompt seat plays `steward` all episode; the episode still finishes `reason: "complete"` |
+| retry also fails | that seat plays `fallback_scripted` (`steward`) for this round; `fallback` event with `cause ∈ {timeout, parse, rate_budget, transport, disabled}`; counted in `results.fallbacks[slot]` |
+| an unclassified transport failure (a rejected credential, a response shape the parser does not expect) | logged with its traceback, then the same retry-once-then-fall-back path with `cause: transport`. It is never allowed out of the batch: an exception escaping `decide` would unwind the round loop, and `_play_game` is a task nobody awaits |
+| no credentials at all (offline CI, cert without a key) | the client marks itself **disabled at startup, makes zero network calls**, and every prompt seat plays `steward` all episode with `cause: disabled` on every `fallback` event — which is the fifth cause, and what a CI replay is full of (`results.fallbacks` counts them); the episode still finishes `reason: "complete"` |
 | a seat's websocket never connects | it passes every round, scores 0, `disconnected: true` in replay and results |
 | every seat disconnects mid-episode | remaining rounds settle with no waiting; `reason: "complete"` |
 | zero seats ever connect | `reason: "no_players"`, artifacts written, exit 0 |
