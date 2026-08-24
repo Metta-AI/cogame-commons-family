@@ -261,6 +261,68 @@ def test_the_registration_default_is_a_steward_not_a_disconnect(tmp_path, monkey
     )
 
 
+# ---------------------------------------------------------------------------
+# the player container
+# ---------------------------------------------------------------------------
+
+
+def test_the_player_retries_a_game_that_is_not_listening_yet(monkeypatch):
+    """The connect race is the difference between six seats and four.
+
+    Both containers start together, so the first connect regularly lands before
+    uvicorn is listening. A player that gives up there costs the seat the whole
+    episode: the game waits out its 180 s connect timeout and then plays the
+    seat as absent, which is how CI's first smoke replay ended up with two
+    `no_submission` seats.
+    """
+    from coworld.examples.commons_family.player import player  # noqa: PLC0415
+
+    attempts = {"n": 0}
+
+    async def flaky(url, **kwargs):
+        attempts["n"] += 1
+        if attempts["n"] < 4:
+            raise OSError("connection refused")
+        return "socket"
+
+    monkeypatch.setattr(player.websockets, "connect", flaky)
+    result = asyncio.run(player.connect_with_retry("ws://game:8080/player", timeout=10))
+    assert result == "socket"
+    assert attempts["n"] == 4
+
+
+def test_the_player_gives_up_inside_its_window_rather_than_hanging(monkeypatch):
+    from coworld.examples.commons_family.player import player  # noqa: PLC0415
+
+    async def never(url, **kwargs):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(player.websockets, "connect", never)
+    started = asyncio.get_event_loop_policy().new_event_loop()
+    try:
+        with pytest.raises(OSError):
+            started.run_until_complete(
+                player.connect_with_retry("ws://game:8080/player", timeout=0.3)
+            )
+    finally:
+        started.close()
+
+
+def test_the_registration_frame_prefers_the_scripted_baseline(monkeypatch):
+    from coworld.examples.commons_family.player import player  # noqa: PLC0415
+
+    monkeypatch.setenv("PLAYER_PROMPT", "take one apple")
+    monkeypatch.setenv("PLAYER_SCRIPTED", "cleaner")
+    frame = player.registration()
+    assert frame == {"type": "prompt", "prompt": "take one apple", "scripted": "cleaner"}
+
+    monkeypatch.delenv("PLAYER_SCRIPTED")
+    assert player.registration()["scripted"] == ""
+
+    monkeypatch.setenv("PLAYER_PROMPT", "x" * 5000)
+    assert len(player.registration()["prompt"]) == player.PROMPT_MAX_RUNES
+
+
 def test_the_environment_is_left_clean(monkeypatch):
     # A guard on the fixture above rather than on the game: a leaked
     # COGAME_CONFIG_URI would make an unrelated import pick up a stale episode.

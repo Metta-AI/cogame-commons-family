@@ -492,6 +492,18 @@ body.feed-collapsed #feed { display: none; }
 .beat-marker.end { top: 0; height: 20px; width: 4px; background: var(--amber); box-shadow: 0 0 6px var(--amber); }
 .seat5 { --tc: var(--amber); }
 
+/* Six plates share the row where the starter had four, so a plate clips its
+   own content instead of bleeding into its neighbour, and the policy name
+   shrinks before the alias does. */
+.plate { overflow: hidden; }
+.plate-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Scorebug plate decorations. The cog chip is the seat colour AND the
    character, so a spectator can match a plate to the cog on the board. */
 .plate-cog {
@@ -599,6 +611,11 @@ body.feed-collapsed #feed { display: none; }
   min-width: 0;
 }
 
+@media (max-width: 1100px) {
+  /* Six plates need more room than the starter's four: the policy name is the
+     first thing to go, well before the embedded width. */
+  .plate-label { display: none; }
+}
 @media (max-width: 640px) {
   /* The featured-match iframe is about 360px wide: the alias, the score and
      the maintenance chip stay, every secondary label goes. */
@@ -608,6 +625,11 @@ body.feed-collapsed #feed { display: none; }
   #patchgrid { grid-template-columns: repeat(3, 1fr); padding: 0 8px 5px; }
   .cf-patch-holders { display: none; }
 }
+@media (max-width: 560px) {
+  #scorebug { grid-template-columns: repeat(3, 1fr); }
+}
 @media (max-width: 420px) {
+  /* Restates the starter's rule so it wins over the 560px one above it. */
+  #scorebug { grid-template-columns: repeat(2, 1fr); }
   #patchgrid { grid-template-columns: repeat(2, 1fr); }
 }
