@@ -90,6 +90,14 @@ MODULE = module_for(CONFIG)
 EPISODE_TIMEOUT_SECONDS = float(
     os.environ.get("COWORLD_TIMEOUT_SECONDS", CONFIG.episode_timeout_seconds)
 )
+# The play budget is anchored at PROCESS START, not at the first round. The
+# player-connect wait (180 s) and the registration grace (5 s) run before
+# `_play_game` and the platform's `episodeTimeoutSeconds` pays for them too, so
+# anchoring after them would have made the worst case
+# 180 + 5 + 0.6 x 1200 = 905 s of a 1200 s episode (75 %) rather than the 60 %
+# the design note promises. Anchored here, artifacts are written by
+# 0.6 x 1200 = 720 s whatever the connect wait cost.
+PROCESS_START = time.monotonic()
 
 
 @asynccontextmanager
@@ -336,8 +344,7 @@ async def _play_game() -> None:
 
 
 async def _run_episode() -> str:
-    start = time.monotonic()
-    play_deadline = start + CONFIG.play_budget_fraction * EPISODE_TIMEOUT_SECONDS
+    play_deadline = PROCESS_START + CONFIG.play_budget_fraction * EPISODE_TIMEOUT_SECONDS
     engine = session.engine
 
     if not session.connected_ever:
@@ -395,6 +402,19 @@ async def _run_episode() -> str:
                 break
             await asyncio.sleep(0.1)
             continue
+        # The wall-clock guard, between rounds so a deadline settle lands on a
+        # clean boundary — and BEFORE a round rather than after it, so the
+        # artifacts are written inside the budget instead of up to one
+        # `round_seconds` past it. Round 0 always plays: a deadline episode is
+        # still a scored episode.
+        if engine.round > 0 and (
+            time.monotonic() + max(session.round_seconds, CONFIG.min_round_seconds)
+            > play_deadline
+        ):
+            note_deadline()
+            reason = "deadline"
+            break
+
         round_start = time.monotonic()
         round_deadline = round_start + session.round_seconds
         session.player_decisions.clear()
@@ -479,11 +499,6 @@ async def _run_episode() -> str:
             )
 
         settle_round(engine, decisions, CONFIG, MODULE)
-
-        if time.monotonic() > play_deadline and engine.round < CONFIG.rounds:
-            note_deadline()
-            reason = "deadline"
-            break
 
     return reason
 

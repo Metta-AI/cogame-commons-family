@@ -442,10 +442,15 @@ a legitimate reply short; it is the backstop.
 
 Episode arithmetic, said out loud:
 
-- **Worst case:** 20 rounds × 20 s = **400 s** of play, plus ≤ 180 s of
-  `player_connect_timeout_seconds` if seats are slow to appear, plus meadow's 30 s post-game
-  linger = **610 s**, which is **50.8 %** of the 1200 s `episodeTimeoutSeconds` — inside the 60 %
-  (720 s) rule.
+- **Worst case:** ≤ 180 s of `player_connect_timeout_seconds` if seats are slow to appear, plus
+  the 5 s registration grace, plus 20 rounds × 20 s = **400 s** of play = **585 s** to written
+  artifacts, which is **48.8 %** of the 1200 s `episodeTimeoutSeconds`. Meadow's 30 s post-game
+  linger runs *after* both artifacts are written, so it is outside the settle-and-score budget.
+  The **hard ceiling** is the guard itself: `play_deadline` is anchored at **process start**
+  (`server.py:PROCESS_START`), not when `_play_game` begins, so the connect wait is inside the
+  budget rather than on top of it and the artifacts are on disk by 0.6 × 1200 = **720 s** even
+  with a hand-edited `rounds`/`round_seconds`. Anchoring after the connect wait would have made
+  that ceiling 180 + 5 + 720 = 905 s (75 %).
 - **Typical:** haiku answering a ~900-token prompt with a one-line JSON object in 3–5 s, six in
   parallel → a round settles in ~5 s → 20 rounds ≈ **100–140 s**, plus ~15 s of pod startup.
 - **All-scripted (CI, cert):** the 3 s pacing floor makes the episode 60 s, not 200 ms — long
@@ -454,8 +459,10 @@ Episode arithmetic, said out loud:
 The guard: the game reads `COWORLD_TIMEOUT_SECONDS` if the environment has it and otherwise
 assumes `episode_timeout_seconds = 1200` (it does **not** receive that variable in hosted
 episodes — only the worker sidecar does), and sets
-`play_deadline = start + 0.6 × timeout = start + 720 s`. Step 9 checks it **between rounds**, so a
-deadline settle always lands on a clean round boundary.
+`play_deadline = PROCESS_START + 0.6 × timeout = process start + 720 s`. Step 9 checks it
+**between rounds**, so a deadline settle always lands on a clean round boundary, and it checks it
+**before** a round rather than after one, so the artifacts are written inside the budget instead
+of up to one `round_seconds` past it. Round 0 always plays: a deadline episode is still scored.
 
 **Request rate:** 6 requests per round, and a round is ≥ 3 s, so the game issues at most 120
 requests per minute. It enforces that as an explicit rolling budget (`llm_max_requests_per_minute

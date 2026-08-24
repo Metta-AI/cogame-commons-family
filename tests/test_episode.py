@@ -202,6 +202,32 @@ def test_the_wall_clock_guard_settles_deadline_with_the_rounds_it_played(tmp_pat
     assert any(event["kind"] == "deadline" for event in replay["events"])
 
 
+def test_the_play_budget_is_anchored_at_process_start_not_at_the_first_round(
+    tmp_path, monkeypatch
+):
+    """The connect wait is inside the budget, not on top of it.
+
+    Anchoring `play_deadline` when `_play_game` starts put the worst case at
+    180 s (connect) + 5 s (grace) + 0.6 x 1200 s = 905 s of a 1200 s episode.
+    Anchored at process start, the artifacts are written inside 720 s whatever
+    the connect wait cost.
+    """
+    module, work = load_server(
+        tmp_path,
+        base_game_config(rounds=20, episode_timeout_seconds=600),
+        monkeypatch,
+    )
+    seat_all(module, ["steward"] * 6)
+    # As if the process had started 500 s ago waiting for players: the
+    # 0.6 x 600 = 360 s play budget is already spent.
+    monkeypatch.setattr(module, "PROCESS_START", module.time.monotonic() - 500)
+    asyncio.run(module._play_game())
+
+    payload = json.loads((work / "results.json").read_bytes().decode("utf-8"))
+    assert payload["reason"] == "deadline"
+    assert payload["rounds"] == 1                 # round 0 always plays, then the guard
+
+
 def test_a_pause_cannot_hold_the_episode_past_the_wall_clock_guard(tmp_path, monkeypatch):
     """`/admin` takes no token, and the paused branch used to skip the guard.
 
