@@ -416,6 +416,42 @@ def test_the_player_gives_up_inside_its_window_rather_than_hanging(monkeypatch):
         started.close()
 
 
+def test_the_spectate_loop_gives_up_instead_of_waiting_on_a_dead_game(monkeypatch):
+    """`while True: await websocket.recv()` with `ping_timeout=None` is forever.
+
+    The connect phase was bounded; spectating was not. A game that died without
+    closing its socket left the player container blocked on a read until the
+    platform killed the pod.
+    """
+    from coworld.examples.commons_family.player import player  # noqa: PLC0415
+
+    closed = {"n": 0}
+
+    class SilentGame:
+        async def send(self, _frame):
+            return None
+
+        async def recv(self):
+            await asyncio.sleep(3600)
+
+        async def close(self):
+            closed["n"] += 1
+
+    async def connect(url, **kwargs):
+        assert kwargs["ping_timeout"] == player.PING_TIMEOUT_SECONDS
+        return SilentGame()
+
+    monkeypatch.setattr(player.websockets, "connect", connect)
+    monkeypatch.setattr(player, "SPECTATE_TIMEOUT_SECONDS", 0.3)
+    monkeypatch.setenv("COWORLD_PLAYER_WS_URL", "ws://game:8080/player?slot=0")
+
+    async def drive() -> None:
+        await asyncio.wait_for(player.main(), timeout=10)
+
+    asyncio.run(drive())
+    assert closed["n"] == 1
+
+
 def test_the_registration_frame_prefers_the_scripted_baseline(monkeypatch):
     from coworld.examples.commons_family.player import player  # noqa: PLC0415
 

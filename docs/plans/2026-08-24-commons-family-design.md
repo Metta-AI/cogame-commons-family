@@ -600,7 +600,7 @@ example is renamed and the resource physics are factored out of the engine into 
 | `…/game/llm.py` | meadow `player/policies.py:LlmPolicy` | moved server-side; truncated throttle ladder; per-call deadline; one parallel batch per round; retry-once-then-fallback |
 | `…/game/baselines.py` | meadow `player/policies.py` (the six scripted classes) | generalised across modules; `steward` is the fallback |
 | `…/game/server.py` | meadow `game/server.py` | round barrier becomes "batch complete or `round_seconds`", with the `min_round_seconds` floor and the `play_deadline` guard; `/player` registration message; alias assignment; the richer replay writer; **linger and artifact handling kept verbatim** |
-| `…/player/player.py` | meadow `player/player.py` | registers `{"type":"prompt","prompt":…,"scripted":…}` from `PLAYER_PROMPT` / `PLAYER_SCRIPTED`, then spectates until `final` |
+| `…/player/player.py` | meadow `player/player.py` | registers `{"type":"prompt","prompt":…,"scripted":…}` from `PLAYER_PROMPT` / `PLAYER_SCRIPTED`, then spectates until `final` — **bounded on both ends**: the connect retries inside a 150 s window, the socket carries `ping_interval = 20 s` / `ping_timeout = 30 s` so a game that died without closing its socket is noticed, and the spectate loop has a 1080 s deadline (past the game's own worst case of a 720 s play budget plus the 90 s hard-cap linger). Every one of those exits 0 |
 | `…/grader/commons_grader.py` | meadow `grader/meadow_grader.py` | per-module `planner_optimum`, plus `public_effort_share` |
 | `…/headless.py` | meadow `headless.py` | unchanged in shape (`parallel_seats=True` is how tests exercise the batch) |
 | `…/shared/{artifact_io,log_shipper}.py` | meadow's | **verbatim, byte-for-byte** |

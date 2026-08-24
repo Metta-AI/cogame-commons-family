@@ -6,6 +6,11 @@ connects, sends one `prompt` frame naming either its standing orders
 (`PLAYER_PROMPT`) or a scripted baseline (`PLAYER_SCRIPTED`), and then
 spectates until the game sends `final`.
 
+Every wait here is bounded: the connect retries inside a 150 s window, the
+socket carries a ping timeout so a game that died without closing its socket is
+noticed, and the spectate loop itself has a wall-clock deadline past the game's
+own worst case.
+
 `PLAYER_SCRIPTED` wins when both are set. A dead socket is lifecycle, not an
 error: this process exits 0 whatever the game does to it, because a player
 container that exits non-zero fails the whole episode.
@@ -33,6 +38,18 @@ SCRIPTED_MAX_RUNES = 32
 # then plays the seat as absent. Retry inside that window instead.
 CONNECT_TIMEOUT_SECONDS = float(os.environ.get("COMMONS_FAMILY_CONNECT_TIMEOUT_SECONDS", "150"))
 CONNECT_RETRY_MAX_SECONDS = 2.0
+# Spectating is bounded too. The game's own worst case is the 0.6 x 1200 s play
+# budget (anchored at ITS process start, so the connect wait is inside it) plus
+# the 90 s hard-cap linger; past that the game is gone and this process should
+# be too, rather than sitting on a socket until the platform kills the pod.
+SPECTATE_TIMEOUT_SECONDS = float(
+    os.environ.get("COMMONS_FAMILY_SPECTATE_TIMEOUT_SECONDS", "1080")
+)
+# A dead game that never closed its socket is the case a blocking read cannot
+# see: without a ping timeout the recv() below waits forever on a peer that
+# will never speak again.
+PING_INTERVAL_SECONDS = 20.0
+PING_TIMEOUT_SECONDS = 30.0
 
 
 def registration() -> dict[str, str]:
@@ -53,7 +70,11 @@ async def connect_with_retry(url: str, timeout: float = CONNECT_TIMEOUT_SECONDS)
     while True:
         attempt += 1
         try:
-            return await websockets.connect(url, ping_timeout=None)
+            return await websockets.connect(
+                url,
+                ping_interval=PING_INTERVAL_SECONDS,
+                ping_timeout=PING_TIMEOUT_SECONDS,
+            )
         except Exception as error:  # noqa: BLE001 - any startup race is retryable
             if time.monotonic() >= deadline:
                 logger.info("could not reach the game after %d attempts: %s", attempt, error)
@@ -80,11 +101,19 @@ async def main() -> None:
     try:
         await websocket.send(json.dumps(frame, ensure_ascii=False))
         logger.info("registered; spectating until the game says final")
+        deadline = time.monotonic() + SPECTATE_TIMEOUT_SECONDS
         while True:
-            message = cast(dict[str, Any], json.loads(await websocket.recv()))
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                logger.info("spectate deadline reached without a final frame, exiting")
+                return
+            raw = await asyncio.wait_for(websocket.recv(), timeout=remaining)
+            message = cast(dict[str, Any], json.loads(raw))
             if message.get("type") == "final":
                 logger.info("received final message, exiting")
                 return
+    except asyncio.TimeoutError:
+        logger.info("no frame from the game inside the spectate window, exiting")
     except websockets.exceptions.ConnectionClosed:
         # The server exiting after the last round is the episode-over signal for
         # a seat still waiting; a closed socket here is lifecycle, not an error.
