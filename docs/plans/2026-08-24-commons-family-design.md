@@ -800,8 +800,17 @@ is the chart (module-primary quantity and the maintenance quantity, cumulative t
   `roundRect` harden those three helpers against non-string and degenerate input. The identifier
   rename `BullwhipRenderer` → `CommonsRenderer` is applied to the export object and its two call
   sites, and the export object's key set is unchanged.
-- **`client/chrome.css` is copied byte-for-byte from bullwhip** except for the four surgical edits
-  listed below. (Bullwhip's lineage keeps its chrome in `renderer.js` + `chrome.css`; it has no
+- **`client/chrome.css` is bullwhip's file with three in-place edits and one appended block.** The
+  three, and there are no others (`diff` against the starter is exactly these hunks plus the
+  append): the header comment, which now records this provenance; `#scorebug`
+  `grid-template-columns: repeat(4, 1fr)` → `repeat(6, 1fr)`, because this game seats six where
+  bullwhip seats four; and `#endscreen { bottom: var(--band, 0px) }`, which is transport edit 2
+  below. Everything above the banner comment is otherwise the starter's, unmodified — the stage,
+  the top band, the scorebug plates (`.plate-name { flex: 1 1 auto; min-width: 3.2em }` included),
+  the feed, the transport and scrubber, the endscreen and both narrow-width media queries. The
+  appended block under the banner `commons-family additions to the inherited cogame-bullwhip
+  chrome` carries the beat-kind rules, the plate decorations and `#modulebar`/`#patchgrid`.
+  (Bullwhip's lineage keeps its chrome in `renderer.js` + `chrome.css`; it has no
   `chrome_common.js` and no `replay_broadcast.html` — those are the paintbot lineage's names, and
   this repo does not take anything from paintbot.)
 - **`replay-viewer/index.html` is bullwhip's page with a game block appended** — not a rewrite that
