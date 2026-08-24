@@ -343,6 +343,23 @@ async def _play_game() -> None:
     await _finish(reason)
 
 
+async def _await_registrations(grace_seconds: float) -> None:
+    """Return once every connected socket has registered, or when the grace ends.
+
+    A fixed sleep here is 5 s added to every episode, and the certifier's local
+    smoke budget is 60 s for the whole thing — game start, play, and the
+    post-game linger included. Waiting only as long as there is something to
+    wait for is both faster and the same "bound every wait" rule the round loop
+    follows.
+    """
+    deadline = time.monotonic() + grace_seconds
+    while time.monotonic() < deadline:
+        connected = set(session.players)
+        if connected and connected <= set(session.registrations):
+            return
+        await asyncio.sleep(0.05)
+
+
 async def _run_episode() -> str:
     play_deadline = PROCESS_START + CONFIG.play_budget_fraction * EPISODE_TIMEOUT_SECONDS
     engine = session.engine
@@ -351,8 +368,11 @@ async def _run_episode() -> str:
         logger.info("no player ever connected; settling as no_players")
         return "no_players"
 
-    # Give every connected socket its registration window before round 0.
-    await asyncio.sleep(REGISTRATION_GRACE_SECONDS)
+    # Give every connected socket its registration window before round 0 —
+    # and not one tick longer than it needs. The registration frame follows the
+    # welcome immediately, so this almost always returns in milliseconds; the
+    # grace is the bound for a socket that connected and then went quiet.
+    await _await_registrations(REGISTRATION_GRACE_SECONDS)
     for slot in sorted(session.connected_ever):
         _policy_for(slot)
     for slot in range(CONFIG.num_agents):

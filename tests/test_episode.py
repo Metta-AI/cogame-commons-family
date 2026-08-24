@@ -14,6 +14,7 @@ import itertools
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -355,6 +356,69 @@ def test_an_unexpected_failure_in_the_round_loop_still_writes_artifacts(tmp_path
     assert payload["reason"] == "complete"
     assert payload["rounds"] == 2                 # the rounds that did settle
     assert (work / "replay.json").exists()
+
+
+def test_the_registration_grace_returns_as_soon_as_every_seat_has_registered(
+    tmp_path, monkeypatch
+):
+    """A fixed sleep here is 5 s added to every episode, hosted ones included.
+
+    It also has to fit: `coworld certify` gives the whole local smoke episode
+    60 s — game start, play and the 30 s post-game linger included — and a
+    fixed grace plus eight paced rounds plus that linger overran it (release
+    0.1.0, run 32775332432).
+    """
+    module, _ = load_server(tmp_path, base_game_config(), monkeypatch)
+    module.REGISTRATION_GRACE_SECONDS = 5.0
+
+    class FakeSocket:
+        pass
+
+    for slot in range(6):
+        module.session.players[slot] = FakeSocket()
+        module.session.registrations[slot] = {"prompt": "", "scripted": "steward"}
+
+    started = time.monotonic()
+    asyncio.run(module._await_registrations(module.REGISTRATION_GRACE_SECONDS))
+    assert time.monotonic() - started < 1.0
+
+
+def test_the_registration_grace_still_bounds_a_socket_that_goes_quiet(
+    tmp_path, monkeypatch
+):
+    module, _ = load_server(tmp_path, base_game_config(), monkeypatch)
+
+    class FakeSocket:
+        pass
+
+    module.session.players[0] = FakeSocket()     # connected, never registers
+    started = time.monotonic()
+    asyncio.run(module._await_registrations(0.4))
+    elapsed = time.monotonic() - started
+    assert 0.35 < elapsed < 2.0
+
+
+def test_the_certification_fixture_fits_the_certifiers_local_smoke_budget():
+    """`coworld certify` defaults to --timeout-seconds 60 for the whole episode.
+
+    That budget covers game start, every round, AND the post-game linger. The
+    variants keep the 3 s pacing floor that makes a league episode watchable;
+    the fixture does not need it, because what the viewer soaks is the event
+    COUNT, and the fixture's eight rounds are unchanged.
+    """
+    manifest = json.loads((Path(__file__).resolve().parents[1] /
+                           "coworld_manifest_template.json").read_text())
+    fixture = manifest["certification"]["game_config"]
+    linger = 30.0            # COMMONS_FAMILY_POST_GAME_LINGER_SECONDS default
+    grace = 5.0              # REGISTRATION_GRACE_SECONDS, the worst case
+    play = fixture["rounds"] * fixture["min_round_seconds"]
+    assert grace + play + linger < 50.0, (
+        f"the cert episode needs {grace + play + linger:.0f}s of a 60s budget "
+        "before container start is counted"
+    )
+    assert fixture["rounds"] == 8, "the viewer soak needs the event count kept"
+    for variant in manifest["variants"]:
+        assert variant["game_config"]["min_round_seconds"] == 3
 
 
 def test_the_registration_default_is_a_steward_not_a_disconnect(tmp_path, monkeypatch):

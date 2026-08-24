@@ -856,7 +856,7 @@
       "module": "cleanup",
       "rounds": 8,
       "round_seconds": 6,
-      "min_round_seconds": 3,
+      "min_round_seconds": 1,
       "seed": 20260824,
       "ledger_public": true,
       "sanctions_enabled": true,
