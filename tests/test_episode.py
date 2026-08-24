@@ -202,6 +202,32 @@ def test_the_wall_clock_guard_settles_deadline_with_the_rounds_it_played(tmp_pat
     assert any(event["kind"] == "deadline" for event in replay["events"])
 
 
+def test_a_pause_cannot_hold_the_episode_past_the_wall_clock_guard(tmp_path, monkeypatch):
+    """`/admin` takes no token, and the paused branch used to skip the guard.
+
+    A pause held the round loop in `await asyncio.sleep(0.1)` forever: the
+    deadline test sat after `settle_round`, which a paused loop never reaches,
+    so the pod died at `episodeTimeoutSeconds` with no artifacts.
+    """
+    module, work = load_server(
+        tmp_path,
+        base_game_config(rounds=20, episode_timeout_seconds=1.0),
+        monkeypatch,
+    )
+    seat_all(module, ["steward"] * 6)
+
+    async def drive() -> None:
+        module.session.paused = True
+        await asyncio.wait_for(module._play_game(), timeout=30)
+
+    asyncio.run(drive())
+
+    payload = json.loads((work / "results.json").read_bytes().decode("utf-8"))
+    assert payload["reason"] == "deadline"
+    replay = json.loads((work / "replay.json").read_bytes().decode("utf-8"))
+    assert any(event["kind"] == "deadline" for event in replay["events"])
+
+
 def test_no_seat_connecting_settles_no_players_with_zero_scores(tmp_path, monkeypatch):
     module, work = load_server(tmp_path, base_game_config(), monkeypatch)
     asyncio.run(module._play_game())

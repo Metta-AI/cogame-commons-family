@@ -369,9 +369,30 @@ async def _run_episode() -> str:
         for slot in range(CONFIG.num_agents)
     }
 
+    def note_deadline() -> None:
+        engine.events.append(
+            {
+                "kind": "deadline",
+                "r": engine.round,
+                "text": (
+                    f"Wall-clock guard fired — scored on {engine.round} of "
+                    f"{CONFIG.rounds} rounds."
+                ),
+            }
+        )
+
     reason = "complete"
     while engine.round < CONFIG.rounds:
         if session.paused:
+            # A pause is an admin convenience, not a licence to hold the
+            # episode past its wall-clock budget: `/admin` takes no token, and
+            # the platform kills the pod at `episodeTimeoutSeconds` with no
+            # artifacts written. The guard is checked here too, so a pause that
+            # outlives the budget settles and scores instead of spinning.
+            if time.monotonic() > play_deadline:
+                note_deadline()
+                reason = "deadline"
+                break
             await asyncio.sleep(0.1)
             continue
         round_start = time.monotonic()
@@ -460,16 +481,7 @@ async def _run_episode() -> str:
         settle_round(engine, decisions, CONFIG, MODULE)
 
         if time.monotonic() > play_deadline and engine.round < CONFIG.rounds:
-            engine.events.append(
-                {
-                    "kind": "deadline",
-                    "r": engine.round,
-                    "text": (
-                        f"Wall-clock guard fired — scored on {engine.round} of "
-                        f"{CONFIG.rounds} rounds."
-                    ),
-                }
-            )
+            note_deadline()
             reason = "deadline"
             break
 
