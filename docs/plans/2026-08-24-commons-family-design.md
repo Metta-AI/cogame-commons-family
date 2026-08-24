@@ -969,8 +969,11 @@ never receives the secret and every league episode silently plays scripted);
 maxItems: 6` on `tokens` and `players`; a `results_schema` covering every results key above with
 `reason` an enum of exactly `["complete","deadline","no_players"]`.
 
-**`game.docs`** — `readme` `{"type":"uri","value":"https://github.com/Metta-AI/cogame-commons-family/blob/main/src/coworld/examples/commons_family/README.md"}`
-plus `pages[]`: `rules.md` (the shared round and the scoring formula), `modules.md` (the four
+**`game.docs`** — `readme` `{"type":"text","value":"<the whole of
+src/coworld/examples/commons_family/README.md, inline>"}`, **inline text and not a `uri`**: the
+acceptance checklist spells this member out literally, and a reader of the manifest should not
+have to fetch a URL to read the game's own front page (a test asserts the value is byte-identical
+to the README). Plus `pages[]`: `rules.md` (the shared round and the scoring formula), `modules.md` (the four
 physics with their numbers), `institutions.md` (ledger / sanctions / norm / chat and what each
 variant switches on), `policies.md` (how to field a policy: `PLAYER_PROMPT` vs `PLAYER_SCRIPTED`,
 the reply schema and its caps). **`game.protocols` carries BOTH `player` and `global`**, each an
