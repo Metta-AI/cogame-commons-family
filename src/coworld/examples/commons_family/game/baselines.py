@@ -19,7 +19,14 @@ from typing import Any
 
 from coworld.examples.commons_family.game.modules.base import COLORS
 
-CLEAN_POLLUTION_TRIGGER = 0.35
+# The steward's two tuned constants. Not guessed: `tools/tune_baselines.py`
+# sweeps them over a 6x6 grid, plays every combination through the four modules
+# in three societies (six stewards, the mixed room, half the room free-riding)
+# and scores each one as "what a steward took plus its share of what it left
+# standing", rejecting any combination whose monoculture kills the resource.
+# `tests/test_tuning.py` runs that sweep in CI and fails if the shipped pair
+# falls more than 2 % below the grid's best admissible combination.
+CLEAN_POLLUTION_TRIGGER = 0.15
 CLEANUP_STOCK_FLOOR = 30.0
 CONTRITE_ROUNDS = 5
 

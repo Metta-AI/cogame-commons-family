@@ -492,7 +492,7 @@ It is meadow's `SustainablePolicy` generalised, and its algorithm is:
    `Σ_c 0.5 × planted[c]² / field_size`; `mushrooms` → `spawn_per_round`.
 2. Its personal quota is `floor(sustainable / num_players)`, at least 0 and at most
    `effort_budget`.
-3. `cleanup`: if `pollution > 0.35`, spend 1 unit on `clean`; harvest the quota with what is left;
+3. `cleanup`: if `pollution > 0.15`, spend 1 unit on `clean`; harvest the quota with what is left;
    harvest 0 while `apples < 30`.
 4. `harvest`: choose the **fullest live patch it is allowed to name** (`open` → any; `closed` →
    its own; `partnership` → the pair patch with the higher stock, always naming it so a partner
@@ -529,6 +529,25 @@ The rest, each a small precise rule:
   then five contrite quota rounds.
 - **`random`** — meadow's, unchanged, seeded per slot: uniform over legal decisions. The
   maximum-variance control and the fuzz source for the legality test.
+
+**The steward's two constants are tuned by a grid harness, not guessed.**
+`tools/tune_baselines.py` sweeps `CLEAN_POLLUTION_TRIGGER ∈ {0.05 … 0.55}` × `CLEANUP_STOCK_FLOOR
+∈ {0 … 50}` — 36 combinations — and plays each one through **all four modules** in **three
+societies**: six stewards, the mixed room (two stewards, a cleaner, a punisher, a free rider, a
+random cog) and a pressure room (three stewards, three free riders). Each of those 12 episodes
+scores the combination as *what a steward took plus its equal share of what it left standing*
+(`mean(steward scores) + residual_value / num_agents`), and a combination whose monoculture kills
+the resource in any module is inadmissible whatever it scores. Everything is seeded and
+deterministic, so the table is reproducible and `tests/test_tuning.py` runs the same sweep in CI.
+
+The sweep is what set `CLEAN_POLLUTION_TRIGGER = 0.15`: the original guess of 0.35 scores 384.6
+against the grid's best 409.3 (−6.0 %), and 0.15 scores 405.0 (−1.0 %). The corner the grid likes
+best, `trigger = 0.05`, makes the steward clean whenever the river is dirty at all — an
+unconditional rule, which is exactly the `cleaner` baseline, and the difference between a
+conditional steward and an unconditional contributor is one of the things this coworld measures;
+so the shipped value is the best *conditional* one and the test's tolerance is 2 %.
+`CLEANUP_STOCK_FLOOR = 30` costs 0.5 % against the grid's best floor and buys what the score does
+not price: under pressure it stops a steward taking the last apples of a dying orchard.
 
 ### Degrade, never hang
 
