@@ -133,20 +133,14 @@ proc buildStates(replay: JsonNode): JsonNode =
           let frozenList = record{"seat_frozen"}
           if not frozenList.isNil and slot < frozenList.len:
             frozen[slot] = frozenList[slot].getInt(0) > r
-          let decisions = record{"decisions"}
-          if not decisions.isNil and slot < decisions.len:
-            let decision = decisions[slot]
-            var spent = 0.0
-            case moduleName
-            of "cleanup": spent = decision{"clean"}.getFloat(0.0)
-            of "allelopathic": spent = decision{"plant"}.getFloat(0.0)
-            of "mushrooms":
-              if decision{"eat_color"}.getStr("red") != "red":
-                spent = decision{"eat"}.getFloat(0.0)
-            else:
-              spent = config{"effort_budget"}.getFloat(3.0) -
-                decision{"harvest"}.getFloat(0.0)
-            effort[slot] = effort[slot] + spent
+          # RECORDED, not recomputed: `seat_public_effort[slot]` is what the
+          # engine booked in step 8. Deriving it here from the decision would
+          # be a second implementation of `Module.public_effort` in another
+          # language, and the two would drift the first time a module's
+          # maintenance act changed.
+          let seatEffort = record{"seat_public_effort"}
+          if not seatEffort.isNil and slot < seatEffort.len:
+            effort[slot] = effort[slot] + seatEffort[slot].getFloat()
         let series = record{"series"}
         if not series.isNil:
           seriesTotal.add(series{"total"}.getFloat(0.0))

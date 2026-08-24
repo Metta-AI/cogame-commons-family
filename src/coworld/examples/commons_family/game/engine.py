@@ -164,6 +164,7 @@ class RoundRecord:
     state_after: dict[str, Any]
     total_extracted: float
     public_effort: int
+    seat_public_effort: list[int]
     collapsed: bool
     series: dict[str, float]
     seat_frozen: list[int]
@@ -180,6 +181,7 @@ class RoundRecord:
             "state_after": self.state_after,
             "total_extracted": round(self.total_extracted, 3),
             "public_effort": self.public_effort,
+            "seat_public_effort": list(self.seat_public_effort),
             "collapsed": self.collapsed,
             "series": self.series,
             "seat_frozen": self.seat_frozen,
@@ -447,11 +449,15 @@ def settle_round(
             state.collapse_round = r
     state.events.extend(_stamp(dynamics_events, state))
 
-    # Step 8 — book the round.
+    # Step 8 — book the round. The per-seat maintenance effort is computed
+    # HERE, once, and recorded per round: it is the one derived quantity the
+    # viewer shows, and a viewer that recomputed it would be a second
+    # implementation of `Module.public_effort` in another language.
+    efforts = [module.public_effort(decision, config) for decision in decisions]
     for slot in range(config.num_agents):
         state.scores[slot] += gains[slot]
         state.total_extracted[slot] += extracted[slot]
-        state.public_effort[slot] += module.public_effort(decisions[slot], config)
+        state.public_effort[slot] += efforts[slot]
         state.recent[slot].append(module.compact(decisions[slot]))
         state.recent[slot] = state.recent[slot][-RECENT_ACTIONS:]
 
@@ -465,7 +471,8 @@ def settle_round(
         scores=list(state.scores),
         state_after=state_after,
         total_extracted=sum(extracted),
-        public_effort=sum(module.public_effort(d, config) for d in decisions),
+        public_effort=sum(efforts),
+        seat_public_effort=list(efforts),
         collapsed=_collapsed(state_after) or state.collapse_round is not None,
         series=module.series(state.module_state, config),
         seat_frozen=list(state.module_state.get("frozen_until", [0] * config.num_agents)),

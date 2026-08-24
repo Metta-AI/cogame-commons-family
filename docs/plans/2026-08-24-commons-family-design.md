@@ -682,7 +682,7 @@ lookup, no name service.
             "sanction":null,"message":"one each","src":"llm"}],
             "gains":[1.0,2.0,0.0,1.0,1.0,2.0],"scores":[1.0,2.0,0.0,1.0,1.0,2.0],
             "state_after":{…module_state…},"total_extracted":7.0,"public_effort":3,
-            "collapsed":false}],
+            "seat_public_effort":[1,0,2,0,0,0],"collapsed":false}],
  "events":[{"kind":"round_open","r":0}, …],
  "results":{"reason":"complete","rounds":20,"scores":[…],"total_extracted":[…],
             "public_effort":[…],"sanctions_given":[…],"sanctions_received":[…],
@@ -750,6 +750,14 @@ each round's fully settled `state_before` / `state_after` / `gains` / `scores`, 
 the event vocabulary, **expands the round records into one renderer state per event** (the
 scrubber indexes events, as bullwhip's does), and emits the payload the renderer reads. A
 malformed replay sets `lastError` and returns 0, which the shell turns into `data-replay-error`.
+
+**The expander derives nothing.** Every number in a `states[i]` is copied out of a round record —
+including each seat's maintenance effort, which the round record carries per seat as
+`seat_public_effort` exactly as the engine booked it in step 8. The wasm module must never
+recompute it from the decision (`clean`, `plant`, `effort_budget − harvest`, a non-red `eat`),
+because that is `Module.public_effort` written a second time in a second language, and the two
+copies drift the first time a module's maintenance act changes. A test asserts both halves: that
+the record carries the per-seat effort the module computes, and that the Nim reads it.
 
 **The exact state JSON the viewer reads** (`cf_payload_ptr` → `JSON.parse` →
 `CommonsRenderer.attachReplay({payload})`):

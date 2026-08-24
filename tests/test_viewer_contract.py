@@ -295,6 +295,22 @@ def test_the_payload_keys_the_renderer_reads_are_the_ones_the_wasm_emits():
         assert f"seat.{field}" in renderer or f'seat["{field}"]' in renderer, field
 
 
+def test_the_wasm_module_reads_the_recorded_effort_instead_of_recomputing_it():
+    """One source of truth for `public_effort`: the engine.
+
+    The expander used to switch on the module name and re-derive each seat's
+    maintenance effort from its recorded decision (`clean`, `plant`,
+    `effort_budget - harvest`, a non-red `eat`) — a second implementation of
+    `Module.public_effort` in Nim. It now reads `seat_public_effort`, which the
+    engine books in step 8 and the round record carries.
+    """
+    nim = read(WASM_NIM)
+    assert '"seat_public_effort"' in nim
+    for recomputation in ('decision{"clean"}', 'decision{"plant"}',
+                          'decision{"harvest"}', 'decision{"eat_color"}'):
+        assert recomputation not in nim, recomputation
+
+
 @pytest.mark.parametrize("module_name", ["cleanup", "harvest", "allelopathic", "mushrooms"])
 def test_the_module_bar_reads_keys_the_module_actually_publishes(module_name):
     """`cfModuleBar` in index.html reads resource fields; they must exist."""

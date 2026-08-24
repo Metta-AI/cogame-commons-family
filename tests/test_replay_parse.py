@@ -93,12 +93,38 @@ def test_every_round_record_has_the_shape_the_viewer_expands(replay):
     seats = replay["config"]["num_agents"]
     for record in replay["rounds"]:
         for key in ("r", "state_before", "state_after", "decisions", "gains",
-                    "extracted", "scores", "series", "seat_frozen"):
+                    "extracted", "scores", "series", "seat_frozen",
+                    "public_effort", "seat_public_effort"):
             assert key in record, key
         assert len(record["gains"]) == seats
         assert len(record["scores"]) == seats
         assert len(record["decisions"]) == seats
         assert set(record["series"]) == {"total", "maintenance"}
+
+
+def test_the_maintenance_effort_the_viewer_shows_is_recorded_per_seat(replay):
+    """The viewer must not re-derive `public_effort` from the decisions.
+
+    It is the one quantity the wasm module used to recompute, per module, from
+    each recorded decision — a second implementation of `Module.public_effort`
+    in another language. The engine books it in step 8 and records it here.
+    """
+    config = CommonsConfig(**replay["config"])
+    module = module_for(config)
+    seats = config.num_agents
+    running = [0] * seats
+    for record in replay["rounds"]:
+        per_seat = record["seat_public_effort"]
+        assert len(per_seat) == seats
+        assert sum(per_seat) == record["public_effort"]
+        for slot, decision in enumerate(record["decisions"]):
+            expected = module.public_effort(
+                parse_decision(decision, slot, config, new_game(config), module, "replay"),
+                config,
+            )
+            assert per_seat[slot] == expected, (record["r"], slot)
+            running[slot] += per_seat[slot]
+    assert running == replay["results"]["public_effort"]
 
 
 def test_note_is_absent_from_the_replay_entirely(episode_dir: Path):
