@@ -129,8 +129,10 @@ class BedrockTransport:
             code = error.response.get("Error", {}).get("Code", "")
             if code in ("ThrottlingException", "ServiceUnavailableException", "ModelTimeoutException"):
                 raise LlmThrottled(code) from error
-            # Auth and validation errors are configuration bugs; they must be
-            # loud at round 0, not silently played as a scripted baseline.
+            # Auth and validation errors are configuration bugs. They are
+            # re-raised unclassified so `_decide_seat` logs the traceback in
+            # full; that seat then falls back for the round rather than taking
+            # the episode down with it.
             raise
         except botocore.exceptions.EndpointConnectionError as error:
             raise LlmTransportError(str(error)) from error
@@ -349,6 +351,17 @@ class LlmDecider:
                 continue
             except LlmTransportError as error:
                 logger.warning("slot %d transport error: %s", slot, error)
+                cause = "transport"
+                continue
+            except Exception:  # noqa: BLE001 - an unclassified failure degrades ONE seat
+                # A rejected credential (HTTP 401/403, a botocore auth or
+                # validation ClientError) or a response shape the parser does
+                # not expect is still a transport failure from the seat's point
+                # of view. It is logged with its traceback so a configuration
+                # bug is loud, but it falls back to the scripted baseline: an
+                # exception escaping this batch would otherwise unwind the
+                # round loop and leave the episode with no artifacts at all.
+                logger.exception("slot %d unclassified LLM failure", slot)
                 cause = "transport"
                 continue
             if raw is None:

@@ -318,14 +318,31 @@ def _seat_kinds() -> list[str]:
 
 
 async def _play_game() -> None:
+    """Run the episode; whatever happens, write artifacts and stop.
+
+    Nobody awaits this task (it is created from a websocket handler and from
+    the connect-timeout task), so an exception escaping it would be swallowed
+    by the event loop and the container would sit there until the platform's
+    episode timeout killed it, with no results.json and no replay.json. The
+    guard turns any unexpected failure into a settled episode with the rounds
+    that were played.
+    """
+    try:
+        reason = await _run_episode()
+    except Exception:  # noqa: BLE001 - degrade, never hang
+        logger.exception("the round loop failed; settling on the rounds already played")
+        reason = "complete"
+    await _finish(reason)
+
+
+async def _run_episode() -> str:
     start = time.monotonic()
     play_deadline = start + CONFIG.play_budget_fraction * EPISODE_TIMEOUT_SECONDS
     engine = session.engine
 
     if not session.connected_ever:
         logger.info("no player ever connected; settling as no_players")
-        await _finish("no_players")
-        return
+        return "no_players"
 
     # Give every connected socket its registration window before round 0.
     await asyncio.sleep(REGISTRATION_GRACE_SECONDS)
@@ -456,7 +473,7 @@ async def _play_game() -> None:
             reason = "deadline"
             break
 
-    await _finish(reason)
+    return reason
 
 
 async def _broadcast(observations: dict[int, dict]) -> None:

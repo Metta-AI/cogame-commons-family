@@ -249,6 +249,62 @@ def test_a_player_sent_decision_overrides_the_game_side_one(tmp_path, monkeypatc
     assert decision["harvest"] == 3
 
 
+def test_a_transport_that_raises_settles_the_episode_with_fallbacks(tmp_path, monkeypatch):
+    """The episode must degrade, never hang, on an unclassified LLM failure.
+
+    Six prompt seats and a transport that raises `HTTPError 401` on every call:
+    before this was handled the exception unwound `decide` -> `to_thread` ->
+    `_play_game`, whose task nobody awaits, and the episode ended with no
+    results.json, no replay.json and no exit.
+    """
+    from urllib.error import HTTPError  # noqa: PLC0415
+
+    module, work = load_server(tmp_path, base_game_config(rounds=3), monkeypatch)
+    for slot in range(6):
+        module.session.connected_ever.add(slot)
+        module.session.registrations[slot] = {"prompt": "take one apple", "scripted": ""}
+
+    class RejectingTransport:
+        def complete(self, body, timeout):
+            raise HTTPError("https://api.anthropic.com/v1/messages", 401,
+                            "Unauthorized", {}, None)
+
+    module.session.decider.transport = RejectingTransport()
+    asyncio.run(module._play_game())
+
+    payload = json.loads((work / "results.json").read_bytes().decode("utf-8"))
+    replay = json.loads((work / "replay.json").read_bytes().decode("utf-8"))
+    assert payload["reason"] == "complete"
+    assert payload["rounds"] == 3
+    assert payload["fallbacks"] == [3] * 6
+    assert all(
+        decision["src"] == "fallback:transport"
+        for record in replay["rounds"]
+        for decision in record["decisions"]
+    )
+
+
+def test_an_unexpected_failure_in_the_round_loop_still_writes_artifacts(tmp_path, monkeypatch):
+    module, work = load_server(tmp_path, base_game_config(rounds=8), monkeypatch)
+    seat_all(module, ["steward"] * 6)
+    real_settle = module.settle_round
+    calls = {"n": 0}
+
+    def explode_on_the_third_round(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 3:
+            raise RuntimeError("something nobody thought of")
+        return real_settle(*args, **kwargs)
+
+    monkeypatch.setattr(module, "settle_round", explode_on_the_third_round)
+    asyncio.run(module._play_game())
+
+    payload = json.loads((work / "results.json").read_bytes().decode("utf-8"))
+    assert payload["reason"] == "complete"
+    assert payload["rounds"] == 2                 # the rounds that did settle
+    assert (work / "replay.json").exists()
+
+
 def test_the_registration_default_is_a_steward_not_a_disconnect(tmp_path, monkeypatch):
     module, work = load_server(tmp_path, base_game_config(rounds=2), monkeypatch)
     module.session.connected_ever.update(range(6))     # connected, never registered

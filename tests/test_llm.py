@@ -180,6 +180,52 @@ def test_a_transport_error_is_reported_as_transport():
     assert (reply, cause) == (None, "transport")
 
 
+def test_an_unclassified_transport_exception_degrades_the_seat_rather_than_escaping():
+    """A rejected credential must cost one seat one round, not the episode.
+
+    `AnthropicTransport` re-raises any non-429/529 `HTTPError` and
+    `BedrockTransport` re-raises any non-throttle `ClientError`, so a 401 (or a
+    response shape the parser does not expect) arrives here unclassified. It
+    used to travel out of the batch, through `decide`, through the server's
+    `to_thread` and into `_play_game`, whose task nobody awaits: no artifacts,
+    no exit.
+    """
+    from urllib.error import HTTPError  # noqa: PLC0415
+
+    error = HTTPError("https://api.anthropic.com/v1/messages", 401,
+                      "Unauthorized", {}, None)
+    transport = StubTransport([error, error])
+    (reply, cause), decider, *_ = decide_one(transport)
+    assert (reply, cause) == (None, "transport")
+    assert transport.calls == 2                    # the retry, and no more
+
+
+def test_an_unclassified_exception_in_one_seat_does_not_stop_the_batch():
+    class EveryThirdCallExplodes:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.lock = threading.Lock()
+
+        def complete(self, body: dict, timeout: float) -> str:
+            with self.lock:
+                self.calls += 1
+                boom = self.calls % 3 == 0
+            if boom:
+                raise KeyError("content")          # the key the parser expects
+            return '"harvest": 1}'
+
+    config, state, module = setup()
+    decider = LlmDecider(config, module, transport=EveryThirdCallExplodes(),
+                         model="claude-haiku-4-5")
+    requests = {
+        slot: (observation(state, config, slot, module), "")
+        for slot in range(config.num_agents)
+    }
+    answers = decider.decide(requests, time.monotonic() + 10)
+    assert sorted(answers) == list(range(6))
+    assert all(cause in ("", "transport") for _, cause in answers.values())
+
+
 def test_throttling_walks_the_ladder_inside_the_round_and_then_gives_up():
     transport = StubTransport([LlmThrottled("429")])
     (reply, cause), decider, *_ = decide_one(transport)
