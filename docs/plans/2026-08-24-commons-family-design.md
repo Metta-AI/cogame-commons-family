@@ -427,7 +427,8 @@ leading or trailing prose is tolerated.
 
 **Every free-text field is truncated on rune boundaries, never byte boundaries.** In Python a
 `str` slice is already a code-point slice, so the truncator is `text.strip()[:cap]` applied in one
-helper (`game/engine.py:truncate_runes`) to `message`, `note`, policy names, and every error
+helper (`game/engine.py:truncate_runes`) to `message`, `note`, policy names, the manifest-authored
+`norm_text` (≤ 400 runes, and `config_schema` carries the same `maxLength`), and every error
 string that can reach the replay; artifacts are written with `ensure_ascii=False` and encoded
 UTF-8 exactly once, so a half rune can never reach the replay bytes (which the strict-UTF-8 test
 asserts). `note` is private: it is echoed back only to its own seat and is **not** written to the

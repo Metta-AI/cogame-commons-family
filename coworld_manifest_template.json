@@ -162,7 +162,8 @@
         },
         "norm_text": {
           "type": "string",
-          "default": ""
+          "default": "",
+          "maxLength": 400
         },
         "fallback_scripted": {
           "type": "string",

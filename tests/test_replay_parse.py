@@ -127,6 +127,27 @@ def test_the_maintenance_effort_the_viewer_shows_is_recorded_per_seat(replay):
     assert running == replay["results"]["public_effort"]
 
 
+def test_the_posted_norm_is_rune_truncated_before_it_reaches_the_prompt(tmp_path):
+    """`norm_text` is manifest-authored, and it still gets the cap.
+
+    It is the one string that reaches both the LLM system prompt and the
+    replay's `config` without coming from a policy, and it carried no cap at
+    all — not in `CommonsConfig`, not in the manifest's `config_schema`.
+    """
+    from coworld.examples.commons_family.game.engine import NORM_MAX_RUNES  # noqa: PLC0415
+
+    long_norm = "一人一苹果，每轮都有人清理河流。🌊" * 60
+    config = CommonsConfig(module="cleanup", num_agents=6, rounds=2,
+                           norm_text=long_norm)
+    assert len(config.norm_text) == NORM_MAX_RUNES
+    assert config.norm_text == long_norm[:NORM_MAX_RUNES]
+
+    state = headless.run_episode(config, headless.build_policies(["steward"] * 6))
+    headless.write_artifacts(state, config, tmp_path)
+    text = (tmp_path / "replay.json").read_bytes().decode("utf-8")   # no handler
+    assert json.loads(text)["config"]["norm_text"] == config.norm_text
+
+
 def test_note_is_absent_from_the_replay_entirely(episode_dir: Path):
     text = (episode_dir / "replay.json").read_bytes().decode("utf-8")
     payload = json.loads(text)

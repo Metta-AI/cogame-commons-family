@@ -19,7 +19,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from coworld.examples.commons_family.game.modules.allelopathic import AllelopathicModule
 from coworld.examples.commons_family.game.modules.base import COLORS, Decision, Module
@@ -36,6 +36,10 @@ VERSION = "0.1.0"
 ALIAS_LETTERS = "ABCDEFGHIJKL"
 NOTE_MAX_CHARS = 200
 PROMPT_MAX_RUNES = 1200
+#: The posted norm comes from the manifest, not from a policy, but it reaches
+#: both the system prompt and the replay's `config`, so it is truncated on rune
+#: boundaries like every other string that gets that far.
+NORM_MAX_RUNES = 400
 RECENT_ACTIONS = 5
 
 MODULES: dict[str, Module] = {
@@ -110,6 +114,11 @@ class CommonsConfig(BaseModel):
     norm_text: str = ""
     fallback_scripted: str = "steward"
     llm_max_requests_per_minute: int = Field(default=120, ge=1)
+
+    @field_validator("norm_text")
+    @classmethod
+    def _cap_norm_text(cls, value: str) -> str:
+        return truncate_runes(value, NORM_MAX_RUNES)
 
     # cleanup
     stock_start: float = Field(default=60.0, ge=0)
