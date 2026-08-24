@@ -777,12 +777,33 @@ is the chart (module-primary quantity and the maintenance quantity, cumulative t
 
 ### Chrome provenance
 
-- **`client/renderer.js` and `client/chrome.css` are copied byte-for-byte from bullwhip** except
-  for the four surgical edits listed below; the identifier rename `BullwhipRenderer` →
-  `CommonsRenderer` is applied to the export object and its two call sites, and nothing else in
-  those files is rewritten. (Bullwhip's lineage keeps its chrome in `renderer.js` + `chrome.css`;
-  it has no `chrome_common.js` and no `replay_broadcast.html` — those are the paintbot lineage's
-  names, and this repo does not take anything from paintbot.)
+- **`client/renderer.js` is bullwhip's file: its chrome scaffolding kept, its board block
+  replaced.** Said exactly, because "byte-for-byte" is not true of this file and the difference is
+  what a reviewer needs to check: the *scaffolding* — `makeRenderer`, `attachLive`,
+  `attachReplay`, `stateToView`, `makeEffects`, `makeNameMap`, `applyNames`, `renderFeed`,
+  `bindFeedToggle`, `buildScrub`, `blockHead`, `describeEvent`, `reasonLine`, `matchHeader`,
+  `updateScorebug`, `updateEndscreen`, `drawChart`, `computeLayout`, `wrapLines`, `drawBubble`,
+  `roundRect`, `ellipsize`, `escapeHtml`, `clampName`, `seatColor`, `hexToRgb`, `rgba`,
+  `assetUrl`, `loadImages`, `isBaselineFiller` — keeps the starter's names, its call graph and its
+  structure, and eight of them are byte-identical to bullwhip's; the rest differ only in this
+  game's strings, its six seats and its module fields. The *board* is the retarget §Readouts
+  describes: bullwhip's supply-chain drawing functions (`drawBelt`, `drawCrate`, `drawDock`,
+  `drawStation`, `drawShipment`, `drawProduction`, `drawCustomers`, `drawSlip`, `drawStack`,
+  `drawTag`, `drawCrateCluster`, `drawCustomerDelivery`, `slotX`, `stageOfSeat`, `peakOrders`,
+  `playerFrameToState`) are gone and this game's four module boards (`drawOrchard`, `drawPatches`,
+  `drawField`, `drawMushrooms`, `drawFlow`, `drawCogRow` and their helpers `cogCentre`,
+  `mushroomRowY`, `moduleBadge`, `maintenanceChip`, `beatLabel`, `chartTitle`) stand in their
+  place, called from the same `draw()` switch. Three further named edits sit outside that: `money`
+  is renamed `score` (the same function, a different unit); `paint()` is added, and every board
+  string is drawn through it, so each one is ellipsized to the frame and its box clamped inside
+  the canvas; and `String()` coercions in `escapeHtml`/`wrapLines` plus a radius clamp in
+  `roundRect` harden those three helpers against non-string and degenerate input. The identifier
+  rename `BullwhipRenderer` → `CommonsRenderer` is applied to the export object and its two call
+  sites, and the export object's key set is unchanged.
+- **`client/chrome.css` is copied byte-for-byte from bullwhip** except for the four surgical edits
+  listed below. (Bullwhip's lineage keeps its chrome in `renderer.js` + `chrome.css`; it has no
+  `chrome_common.js` and no `replay_broadcast.html` — those are the paintbot lineage's names, and
+  this repo does not take anything from paintbot.)
 - **`replay-viewer/index.html` is bullwhip's page with a game block appended** — not a rewrite that
   reuses its ids (cogame-gridlock, 2026-08-23). The `<head>`, `#layout`, `#stage`, `#topband`,
   `#wordmark`, `#clock`, `#topright`, `#statuschip`, `#feedtoggle`, `#scorebug`, `#board-wrap`,
