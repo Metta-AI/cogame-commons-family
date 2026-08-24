@@ -119,6 +119,22 @@ def test_the_shell_owns_the_error_attribute_and_the_renderer_owns_the_loaded_one
     assert tail.index('data-replay-loaded') > tail.index("requestAnimationFrame(frame)")
 
 
+def test_the_ready_bridge_is_posted_only_after_the_first_painted_frame():
+    """`ready` must mean a picture, not a parsed payload.
+
+    `viewer_smoke.mjs` accepts `data-replay-loaded` OR the bridge `ready`,
+    whichever arrives first, so CI cannot see the wrong order — but an
+    embedding page that samples on `ready` screenshots an unpainted shell
+    (chorus 3c11c953, 2026-08-24). The only writer of the attribute is the
+    renderer, at the end of its first draw, so the bridge waits on it.
+    """
+    shell = read(STATIC_JS)
+    assert shell.count('tell("ready")') == 1
+    assert 'whenDrawn(function () { tell("ready"); });' in shell
+    assert 'attributeFilter: ["data-replay-loaded"]' in shell
+    assert 'requestAnimationFrame(function () { tell("ready"); })' not in shell
+
+
 def test_the_fetch_is_bounded_and_retryable():
     shell = read(STATIC_JS)
     assert "AbortController" in shell

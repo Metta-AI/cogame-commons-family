@@ -117,10 +117,32 @@
       assetBase: "./assets",
       payload: payload
     });
-    // The renderer draws on its own animation frame; report ready one frame
-    // later so "ready" means a picture, not merely a parsed payload.
-    window.requestAnimationFrame(function () {
-      window.requestAnimationFrame(function () { tell("ready"); });
+    // `ready` must mean a PICTURE, so it is posted from a callback that fires
+    // after the renderer has set data-replay-loaded="true" — which it does at
+    // the end of its own ready callback, i.e. after the first real draw.
+    // Posting on rAF timing at this call site instead can beat that first
+    // paint, and an embedding page that samples on `ready` then screenshots an
+    // unpainted shell; viewer_smoke.mjs cannot catch it because it accepts
+    // either signal, whichever arrives first (chorus 3c11c953, 2026-08-24).
+    whenDrawn(function () { tell("ready"); });
+  }
+
+  // Calls `done` once `<html data-replay-loaded="true">` is set, or straight
+  // away if the renderer beat us to it.
+  function whenDrawn(done) {
+    var root = document.documentElement;
+    if (root.getAttribute("data-replay-loaded") === "true") {
+      done();
+      return;
+    }
+    var observer = new MutationObserver(function () {
+      if (root.getAttribute("data-replay-loaded") !== "true") return;
+      observer.disconnect();
+      done();
+    });
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ["data-replay-loaded"]
     });
   }
 
