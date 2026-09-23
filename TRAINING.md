@@ -29,5 +29,25 @@ uv run python -m metta_posttrain.train --dataset /tmp/commons-cleanup \
 ```
 
 The dataset imitates scripted play; its loss does not measure policy quality.
-Each module has a different structured action, so a Metta RL or PufferLib
-environment needs a module-specific numeric observation and action codec.
+
+# Numeric reinforcement learning
+
+The persistent bridge exposes all six certified variants to Metta RL and
+native PufferLib. It uses each module's validated decision as a bounded action
+catalog, plus a separate sanction head. The source engine settles all six
+decisions together:
+
+```bash
+python tools/test_train_bridge.py tools/train_bridge.py
+```
+
+Pass the Python interpreter, absolute bridge path, manifest path, and variant
+to Metta's `recipes.external.coworld_metta_rl.train` or
+`recipes.external.coworld.train`. The action heads have 10/24/90/12 module
+choices for Clean Up/Harvest/Allelopathic/Mushrooms, and six sanction slots.
+The sanction head masks all but “no sanction” when sanctions are disabled.
+Numeric observations use only the hosted per-seat observation: public module
+state and ledger, own score, and own last gain. Their widths are 87 for Clean
+Up, 137 for Harvest, 91 for Allelopathic, and 92 for Mushrooms. Public chat,
+posted norms, and private notes remain available to the text post-training
+path; the numeric policy does not emit text.
