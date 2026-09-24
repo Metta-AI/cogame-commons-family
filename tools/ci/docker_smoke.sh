@@ -43,7 +43,7 @@
 #   ANTHROPIC_API_KEY          if set, forwarded to the game so the LLM path
 #                              is exercised; if unset the game must fall back
 #                              to its scripted baselines and still complete
-#   TYPESAFE_API_KEY           if set, forwarded to player pods for Jev policies
+#   TYPESAFE_API_KEY           if set, forwarded only to Jev player pods
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -168,11 +168,15 @@ extra_env = [kv for kv in (os.environ.get("SMOKE_EXTRA_ENV") or "").split() if "
 for slot in range(seats):
     player_id = cert_players[slot].get("player_id") if slot < len(cert_players) else None
     entry = by_id.get(player_id) or {}
-    env_args = []
-    for key, value in (entry.get("env") or {}).items():
-        env_args += ["-e", f"{key}={value}"]
+    env = dict(entry.get("env") or {})
     for kv in extra_env:
-        env_args += ["-e", kv]
+        key, value = kv.split("=", 1)
+        env[key] = value
+    env_args = []
+    for key, value in env.items():
+        env_args += ["-e", f"{key}={value}"]
+    if env.get("PLAYER_JEV") == "1" and os.environ.get("TYPESAFE_API_KEY"):
+        env_args += ["-e", "TYPESAFE_API_KEY"]
     argv = list(entry.get("run") or [player_bin])
     with open(os.path.join(work, f"env-{slot}.args"), "w") as fh:
         fh.write(" ".join(shlex.quote(a) for a in env_args))
@@ -214,16 +218,11 @@ docker run -d --name "${prefix}-game" \
   -v "${work_dir}:/coworld:rw" \
   "${image}" "${game_bin}" >/dev/null
 
-player_secret_env=()
-if [ -n "${TYPESAFE_API_KEY:-}" ]; then
-  player_secret_env+=(-e TYPESAFE_API_KEY)
-fi
 for ((slot = 0; slot < seats; slot++)); do
   eval "penv=( $(cat "${work_dir}/env-${slot}.args") )"
   eval "pcmd=( $(cat "${work_dir}/cmd-${slot}.args") )"
   docker run -d --name "${prefix}-p${slot}" --network "${network}" \
     -e COWORLD_PLAYER_WS_URL="ws://${prefix}-game:${port}/player?slot=${slot}&token=token-${slot}" \
-    ${player_secret_env[@]+"${player_secret_env[@]}"} \
     ${penv[@]+"${penv[@]}"} \
     "${image}" ${pcmd[@]+"${pcmd[@]}"} >/dev/null
 done
