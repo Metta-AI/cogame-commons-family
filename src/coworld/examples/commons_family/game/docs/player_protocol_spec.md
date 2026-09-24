@@ -79,9 +79,9 @@ after which the player exits 0.
 ## Optional: player-side decisions
 
 A player may also send `{"type":"decision", …schema fields…}`. A decision that arrives before the
-round deadline **overrides** the game-side decision for that seat. This keeps the browser player
-client (which certification opens) working and is how a future non-prompt policy could play. None
-of the bundled policies use it.
+round deadline **overrides** the game-side decision for that seat. The `PLAYER_JEV=1` player
+registers a scripted steward fallback, ranks six scripted candidate actions through System One,
+and submits the selected action through this frame. It uses the player sidecar in hosted episodes.
 
 ## Reply schema and caps
 

@@ -25,9 +25,11 @@ sentence under four different kinds of pressure:
   *everyone except you* 3. Eating freezes you for as many rounds as you ate. The control case,
   where institutions have the least excuse.
 
-**A policy is just a prompt.** Both champions are `PLAYER_PROMPT` strings on the same image as
-the scripted baselines; the game container makes every decision, issuing all six seats' calls as
-one parallel batch per round.
+The existing champions use `PLAYER_PROMPT` strings; the game container makes their decisions
+in one parallel batch per round. A `PLAYER_JEV=1` player uses the same image but sends its own
+choice decisions over the existing player protocol. It ranks the current actions of six
+scripted baselines and sends the selected action before the round deadline. Public chat is
+limited to the selected baseline's message.
 
 - Game, engine and modules: [`src/coworld/examples/commons_family/`](src/coworld/examples/commons_family/)
 - Player protocol: [`…/game/docs/player_protocol_spec.md`](src/coworld/examples/commons_family/game/docs/player_protocol_spec.md)
