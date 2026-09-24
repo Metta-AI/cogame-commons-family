@@ -30,6 +30,7 @@ def test_jev_ranks_current_module_actions(module_name, monkeypatch):
     class Response:
         def __init__(self, payload):
             self.payload = payload
+            self.headers = {"X-Coworld-Spend-Usd": "0.0001"}
 
         def __enter__(self):
             return self
@@ -56,7 +57,8 @@ def test_jev_ranks_current_module_actions(module_name, monkeypatch):
                         "probabilities": probabilities,
                         "confidence": 0.5,
                     }
-                }
+                },
+                "usage": {"input_tokens": 10, "output_tokens": 1},
             }
         )
 

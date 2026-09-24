@@ -71,8 +71,14 @@ class ChoiceAnswer(BaseModel):
     confidence: float = Field(ge=0, le=1)
 
 
+class Usage(BaseModel):
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+
 class JevResponse(BaseModel):
     answers: dict[str, ChoiceAnswer]
+    usage: Usage
 
 
 def jev_action(observation: dict[str, Any]) -> dict[str, Any]:
@@ -120,6 +126,7 @@ def jev_action(observation: dict[str, Any]) -> dict[str, Any]:
         request, timeout=min(8.0, observation["round_seconds"] * 0.8)
     ) as response:
         payload = JevResponse.model_validate_json(response.read())
+        spend_usd = response.headers.get("X-Coworld-Spend-Usd")
     answer = payload.answers["decision"]
     if answer.choice not in actions or set(answer.probabilities) != set(actions):
         raise ValueError("Jev returned the wrong choice set")
@@ -132,11 +139,14 @@ def jev_action(observation: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Jev probabilities do not sum to one")
     choice = max(actions, key=answer.probabilities.__getitem__)
     logger.info(
-        "Jev round %d choice %s reported %s latency_ms %d",
+        "Jev round %d choice %s reported %s latency_ms %d input_tokens %s output_tokens %s spend_usd %s",
         observation["round"],
         choice,
         answer.choice,
         round((time.monotonic() - started) * 1000),
+        payload.usage.input_tokens,
+        payload.usage.output_tokens,
+        spend_usd,
     )
     return actions[choice]
 
