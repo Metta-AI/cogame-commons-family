@@ -43,7 +43,6 @@
 #   ANTHROPIC_API_KEY          if set, forwarded to the game so the LLM path
 #                              is exercised; if unset the game must fall back
 #                              to its scripted baselines and still complete
-#   TYPESAFE_API_KEY           if set, forwarded only to Jev player pods
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -175,8 +174,6 @@ for slot in range(seats):
     env_args = []
     for key, value in env.items():
         env_args += ["-e", f"{key}={value}"]
-    if env.get("PLAYER_JEV") == "1" and os.environ.get("TYPESAFE_API_KEY"):
-        env_args += ["-e", "TYPESAFE_API_KEY"]
     argv = list(entry.get("run") or [player_bin])
     with open(os.path.join(work, f"env-{slot}.args"), "w") as fh:
         fh.write(" ".join(shlex.quote(a) for a in env_args))

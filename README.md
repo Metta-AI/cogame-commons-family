@@ -26,10 +26,8 @@ sentence under four different kinds of pressure:
   where institutions have the least excuse.
 
 The existing champions use `PLAYER_PROMPT` strings; the game container makes their decisions
-in one parallel batch per round. A `PLAYER_JEV=1` player uses the same image but sends its own
-choice decisions over the existing player protocol. It ranks the current actions of six
-scripted baselines and sends the selected action before the round deadline. Public chat is
-limited to the selected baseline's message.
+in one parallel batch per round. External policies send decisions over the existing
+player protocol before the round deadline.
 
 - Game, engine and modules: [`src/coworld/examples/commons_family/`](src/coworld/examples/commons_family/)
 - Player protocol: [`…/game/docs/player_protocol_spec.md`](src/coworld/examples/commons_family/game/docs/player_protocol_spec.md)
