@@ -42,7 +42,7 @@ class StubTransport:
         self.barrier = barrier
         self.lock = threading.Lock()
 
-    def complete(self, body: dict, timeout: float) -> str:
+    def complete(self, body: dict, timeout: float, slot: int) -> str:
         if self.barrier is not None:
             # Times out (BrokenBarrierError) unless every seat is here at once.
             self.barrier.wait(timeout=5.0)
@@ -58,7 +58,7 @@ class StubTransport:
 class ExplodingTransport:
     """Any use at all is a failure: the no-credentials path must not call out."""
 
-    def complete(self, body: dict, timeout: float) -> str:  # pragma: no cover
+    def complete(self, body: dict, timeout: float, slot: int) -> str:  # pragma: no cover
         raise AssertionError("the disabled client made a network call")
 
 
@@ -183,8 +183,7 @@ def test_a_transport_error_is_reported_as_transport():
 def test_an_unclassified_transport_exception_degrades_the_seat_rather_than_escaping():
     """A rejected credential must cost one seat one round, not the episode.
 
-    `AnthropicTransport` re-raises any non-429/529 `HTTPError` and
-    `BedrockTransport` re-raises any non-throttle `ClientError`, so a 401 (or a
+    `MessagesTransport` re-raises any non-429/529 `HTTPError`, so a 401 (or a
     response shape the parser does not expect) arrives here unclassified. It
     used to travel out of the batch, through `decide`, through the server's
     `to_thread` and into `_play_game`, whose task nobody awaits: no artifacts,
@@ -206,7 +205,7 @@ def test_an_unclassified_exception_in_one_seat_does_not_stop_the_batch():
             self.calls = 0
             self.lock = threading.Lock()
 
-        def complete(self, body: dict, timeout: float) -> str:
+        def complete(self, body: dict, timeout: float, slot: int) -> str:
             with self.lock:
                 self.calls += 1
                 boom = self.calls % 3 == 0
@@ -324,7 +323,7 @@ def test_each_seat_gets_its_own_system_prompt_built_once():
 
 def test_without_credentials_the_client_is_disabled_and_makes_zero_calls(monkeypatch):
     for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY_URI",
-                 "AWS_ENDPOINT_URL_BEDROCK_RUNTIME"):
+                 "COWORLD_LLM_ENDPOINT"):
         monkeypatch.delenv(name, raising=False)
     transport, model = build_transport()
     assert transport is None
@@ -369,28 +368,73 @@ def test_an_episode_with_no_credentials_still_finishes_complete():
     assert payload["fallbacks"][1] == 4
 
 
-def test_the_credential_ladder_prefers_the_bedrock_sidecar(monkeypatch):
-    monkeypatch.setenv("AWS_ENDPOINT_URL_BEDROCK_RUNTIME", "http://sidecar:8000")
+def test_the_credential_ladder_prefers_the_native_sidecar(monkeypatch):
+    monkeypatch.setenv("COWORLD_LLM_ENDPOINT", "http://sidecar:8000")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     transport, model = build_transport()
-    assert type(transport).__name__ == "BedrockTransport"
-    assert "haiku" in model
+    assert type(transport).__name__ == "MessagesTransport"
+    assert model == "anthropic/claude-haiku-4.5"
+    assert transport.base == "http://sidecar:8000"
+    assert transport.api_key == "sidecar"
 
 
 def test_the_credential_ladder_falls_through_to_the_direct_api(monkeypatch):
-    monkeypatch.delenv("AWS_ENDPOINT_URL_BEDROCK_RUNTIME", raising=False)
+    monkeypatch.delenv("COWORLD_LLM_ENDPOINT", raising=False)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     transport, model = build_transport()
-    assert type(transport).__name__ == "AnthropicTransport"
+    assert type(transport).__name__ == "MessagesTransport"
     assert "haiku" in model
 
 
 def test_the_credential_ladder_reads_the_key_uri_last(monkeypatch, tmp_path):
     key_file = tmp_path / "key"
     key_file.write_text("sk-from-uri\n", encoding="utf-8")
-    monkeypatch.delenv("AWS_ENDPOINT_URL_BEDROCK_RUNTIME", raising=False)
+    monkeypatch.delenv("COWORLD_LLM_ENDPOINT", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setenv("ANTHROPIC_API_KEY_URI", key_file.as_uri())
     transport, _ = build_transport()
-    assert type(transport).__name__ == "AnthropicTransport"
+    assert type(transport).__name__ == "MessagesTransport"
     assert transport.api_key == "sk-from-uri"
+
+
+def test_hosted_transport_posts_native_messages_with_seat_attribution(monkeypatch):
+    import json
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from threading import Thread
+
+    received = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            received.append((self.path, self.headers["X-Coworld-Player-Slot"], body))
+            response = json.dumps({"content": [{"type": "text", "text": "ok"}]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    monkeypatch.setenv("COWORLD_LLM_ENDPOINT", f"http://127.0.0.1:{server.server_port}/")
+    monkeypatch.setenv("COWORLD_LLM_MODEL", "anthropic/claude-sonnet-4.6")
+    monkeypatch.setenv("AWS_ENDPOINT_URL_BEDROCK_RUNTIME", "http://retired.invalid")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "local-key-must-not-be-used")
+    try:
+        transport, model = build_transport()
+        for slot in (0, 1):
+            assert transport.complete({"model": model, "max_tokens": 64, "system": "rules", "messages": [{"role": "user", "content": "view"}]}, 5, slot) == "ok"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+    assert [slot for _, slot, _ in received] == ["0", "1"]
+    for path, _, body in received:
+        assert path == "/v1/messages"
+        assert body["model"] == "anthropic/claude-sonnet-4.6"
+        assert "anthropic_version" not in body

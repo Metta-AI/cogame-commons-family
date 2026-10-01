@@ -1,19 +1,8 @@
-"""The LLM seat — inside the GAME container, not the player container.
+"""Game-owned inference batches use the native Coworld LLM sidecar.
 
-Meadow put its LLM policy in the player container, one Bedrock client per pod.
-This game moves it server-side, adopting bullwhip's split wholesale, for four
-load-bearing reasons: only the party that owns the round barrier can issue all
-six seats' calls as ONE parallel batch; only that party can enforce
-retry-once-then-fall-back-to-scripted (a hung player pod would otherwise
-silently become a passing seat); one container needs the secret instead of six,
-which is what `ANTHROPIC_API_KEY_URI` on the game runnable means; and the
-scripted baselines are already pure `obs -> action` functions, so they become
-the in-process fallback.
-
-Transport ladder, in order: `AWS_ENDPOINT_URL_BEDROCK_RUNTIME` (the hosted
-sidecar) -> Bedrock InvokeModel; else `ANTHROPIC_API_KEY`; else
-`ANTHROPIC_API_KEY_URI`; else DISABLED, which makes zero network calls for the
-whole episode and lets every prompt seat play `steward`.
+Hosted requests prefer COWORLD_LLM_ENDPOINT, carry the requesting seat, and
+use canonical OpenRouter models. Local play can use provider credentials.
+The game owns parallel dispatch, retries, and its scripted fallback.
 """
 
 from __future__ import annotations
@@ -38,7 +27,6 @@ from coworld.examples.commons_family.shared.log_shipper import get_logger
 
 logger = get_logger("commons_family.llm")
 
-DEFAULT_BEDROCK_MODEL = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 
 # Meadow's ladder was (1, 2, 4, 8, 16, 30, 60) — two minutes, far past our
@@ -89,64 +77,15 @@ _AUTO = object()
 # ---------------------------------------------------------------------------
 
 
-class BedrockTransport:
-    """Hosted path: the runner's sidecar endpoint, picked up by boto3."""
+class MessagesTransport:
+    """Native Messages API over the hosted sidecar or a local provider."""
 
-    def __init__(self, model: str) -> None:
-        self.model = model
-        self._client = None
-        self._lock = threading.Lock()
-
-    def _ensure(self, timeout: float):
-        with self._lock:
-            if self._client is None:
-                import boto3  # noqa: PLC0415  # boto3 ships in the image, not the package
-                from botocore.config import Config  # noqa: PLC0415
-
-                self._client = boto3.client(
-                    "bedrock-runtime",
-                    config=Config(
-                        connect_timeout=max(1.0, timeout / 2),
-                        read_timeout=max(1.0, timeout),
-                        retries={"max_attempts": 1},
-                    ),
-                )
-        return self._client
-
-    def complete(self, body: dict, timeout: float) -> str:
-        import botocore.exceptions  # noqa: PLC0415
-
-        client = self._ensure(timeout)
-        try:
-            response = client.invoke_model(modelId=self.model, body=json.dumps(body))
-            content = json.loads(response["body"].read())["content"]
-            return next((block["text"] for block in content if block["type"] == "text"), "")
-        except botocore.exceptions.ReadTimeoutError as error:
-            raise LlmTimeout(str(error)) from error
-        except botocore.exceptions.ConnectTimeoutError as error:
-            raise LlmTimeout(str(error)) from error
-        except botocore.exceptions.ClientError as error:
-            code = error.response.get("Error", {}).get("Code", "")
-            if code in ("ThrottlingException", "ServiceUnavailableException", "ModelTimeoutException"):
-                raise LlmThrottled(code) from error
-            # Auth and validation errors are configuration bugs. They are
-            # re-raised unclassified so `_decide_seat` logs the traceback in
-            # full; that seat then falls back for the round rather than taking
-            # the episode down with it.
-            raise
-        except botocore.exceptions.EndpointConnectionError as error:
-            raise LlmTransportError(str(error)) from error
-
-
-class AnthropicTransport:
-    """Direct API path, used locally and whenever a key is present."""
-
-    def __init__(self, model: str, api_key: str) -> None:
+    def __init__(self, model: str, api_key: str, base: str) -> None:
         self.model = model
         self.api_key = api_key
-        self.base = os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com").rstrip("/")
+        self.base = base.rstrip("/")
 
-    def complete(self, body: dict, timeout: float) -> str:
+    def complete(self, body: dict, timeout: float, slot: int) -> str:
         payload = {
             "model": self.model,
             "max_tokens": body["max_tokens"],
@@ -161,6 +100,7 @@ class AnthropicTransport:
                 "anthropic-version": "2023-06-01",
                 "x-api-key": self.api_key,
                 "user-agent": "cogame-commons-family/0.1",
+                "X-Coworld-Player-Slot": str(slot),
             },
         )
         try:
@@ -181,9 +121,10 @@ class AnthropicTransport:
 
 def build_transport() -> tuple[object | None, str]:
     """The credential ladder. Returns `(transport, model)`; `(None, "")` disables."""
-    if os.environ.get("AWS_ENDPOINT_URL_BEDROCK_RUNTIME"):
-        model = os.environ.get("COMMONS_FAMILY_MODEL", DEFAULT_BEDROCK_MODEL)
-        return BedrockTransport(model), model
+    endpoint = os.environ.get("COWORLD_LLM_ENDPOINT", "").strip()
+    if endpoint:
+        model = os.environ.get("COWORLD_LLM_MODEL", "anthropic/claude-haiku-4.5")
+        return MessagesTransport(model, "sidecar", endpoint), model
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:
         uri = os.environ.get("ANTHROPIC_API_KEY_URI")
@@ -199,7 +140,7 @@ def build_transport() -> tuple[object | None, str]:
                 key = ""
     if key:
         model = os.environ.get("COMMONS_FAMILY_MODEL", DEFAULT_ANTHROPIC_MODEL)
-        return AnthropicTransport(model, key), model
+        return MessagesTransport(model, key, os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com")), model
     return None, ""
 
 
@@ -340,7 +281,7 @@ class LlmDecider:
         for attempt in range(2):
             text = user if attempt == 0 else f"{user}\n\n{RETRY_HINT}"
             try:
-                raw = self._complete(system, text, deadline)
+                raw = self._complete(system, text, deadline, slot)
             except LlmRateBudget:
                 return None, "rate_budget"
             except LlmTimeout:
@@ -375,16 +316,15 @@ class LlmDecider:
             return parsed, ""
         return None, cause
 
-    def _complete(self, system: str, user: str, deadline: float) -> str | None:
+    def _complete(self, system: str, user: str, deadline: float, slot: int) -> str | None:
         # Pre-4.6 models narrate their analysis and never reach the JSON unless
         # an assistant prefill forces the reply to BE the JSON object. 4.6+
         # models reject prefill and need max_tokens headroom instead.
-        prefill = any(marker in self.model for marker in ("haiku-4-5", "sonnet-4-5"))
+        prefill = any(marker in self.model for marker in ("haiku-4-5", "sonnet-4-5", "haiku-4.5", "sonnet-4.5"))
         messages: list[dict[str, Any]] = [{"role": "user", "content": user}]
         if prefill:
             messages.append({"role": "assistant", "content": "{"})
         body = {
-            "anthropic_version": "bedrock-2023-05-31",
             "max_tokens": 300 if prefill else 4000,
             "system": system,
             "messages": messages,
@@ -400,7 +340,7 @@ class LlmDecider:
             if not self._take_budget():
                 raise LlmRateBudget("requests-per-minute budget spent")
             try:
-                completion = self.transport.complete(body, timeout)  # type: ignore[union-attr]
+                completion = self.transport.complete(body, timeout, slot)  # type: ignore[union-attr]
             except LlmThrottled:
                 if sleep_seconds is None:
                     raise
