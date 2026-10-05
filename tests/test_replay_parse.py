@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from coworld.examples.commons_family import headless
-from coworld.examples.commons_family.game.engine import (
+from commons_family import headless
+from commons_family.game.engine import (
     END_REASONS,
     EVENT_KINDS,
     REPLAY_FORMAT,
@@ -134,7 +134,7 @@ def test_the_posted_norm_is_rune_truncated_before_it_reaches_the_prompt(tmp_path
     replay's `config` without coming from a policy, and it carried no cap at
     all — not in `CommonsConfig`, not in the manifest's `config_schema`.
     """
-    from coworld.examples.commons_family.game.engine import NORM_MAX_RUNES  # noqa: PLC0415
+    from commons_family.game.engine import NORM_MAX_RUNES  # noqa: PLC0415
 
     long_norm = "一人一苹果，每轮都有人清理河流。🌊" * 60
     config = CommonsConfig(module="cleanup", num_agents=6, rounds=2,

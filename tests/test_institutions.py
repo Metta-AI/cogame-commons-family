@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from coworld.examples.commons_family.game.engine import (
+from commons_family.game.engine import (
     NOTE_MAX_CHARS,
     CommonsConfig,
     module_for,

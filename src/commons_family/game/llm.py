@@ -17,13 +17,13 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from coworld.examples.commons_family.game.engine import (
+from commons_family.game.engine import (
     PROMPT_MAX_RUNES,
     CommonsConfig,
     truncate_runes,
 )
-from coworld.examples.commons_family.game.modules.base import Module
-from coworld.examples.commons_family.shared.log_shipper import get_logger
+from commons_family.game.modules.base import Module
+from commons_family.shared.log_shipper import get_logger
 
 logger = get_logger("commons_family.llm")
 
@@ -130,7 +130,7 @@ def build_transport() -> tuple[object | None, str]:
         uri = os.environ.get("ANTHROPIC_API_KEY_URI")
         if uri:
             try:
-                from coworld.examples.commons_family.shared.artifact_io import (  # noqa: PLC0415
+                from commons_family.shared.artifact_io import (  # noqa: PLC0415
                     read_data,
                 )
 

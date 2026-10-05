@@ -22,7 +22,7 @@ from typing import Any, cast
 
 import websockets
 
-from coworld.examples.commons_family.shared.log_shipper import get_logger
+from commons_family.shared.log_shipper import get_logger
 
 logger = get_logger("commons_family.player")
 

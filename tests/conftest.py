@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from coworld.examples.commons_family import headless
-from coworld.examples.commons_family.game.engine import CommonsConfig
+from commons_family import headless
+from commons_family.game.engine import CommonsConfig
 
 EPISODE_POLICIES = ["steward", "cleaner", "punisher", "reciprocator", "free_rider", "random"]
 

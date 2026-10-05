@@ -41,9 +41,9 @@ from pathlib import Path
 if __name__ == "__main__" and "coworld" not in sys.modules:  # hand runs
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from coworld.examples.commons_family import headless  # noqa: E402
-from coworld.examples.commons_family.game import baselines  # noqa: E402
-from coworld.examples.commons_family.game.engine import (  # noqa: E402
+from commons_family import headless  # noqa: E402
+from commons_family.game import baselines  # noqa: E402
+from commons_family.game.engine import (  # noqa: E402
     CommonsConfig,
     module_for,
 )

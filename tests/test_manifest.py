@@ -15,7 +15,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = json.loads((ROOT / "coworld_manifest_template.json").read_text(encoding="utf-8"))
-README = ROOT / "src/coworld/examples/commons_family/README.md"
+README = ROOT / "src/commons_family/README.md"
 
 
 def test_the_readme_and_every_page_are_inline_text():

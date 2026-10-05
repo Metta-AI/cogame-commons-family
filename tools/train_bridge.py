@@ -12,8 +12,8 @@ from pydantic import BaseModel, Field, TypeAdapter
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from coworld.examples.commons_family.game.baselines import make_baseline  # noqa: E402
-from coworld.examples.commons_family.game.engine import (  # noqa: E402
+from commons_family.game.baselines import make_baseline  # noqa: E402
+from commons_family.game.engine import (  # noqa: E402
     CommonsConfig,
     module_for,
     new_game,
@@ -23,8 +23,8 @@ from coworld.examples.commons_family.game.engine import (  # noqa: E402
     results,
     settle_round,
 )
-from coworld.examples.commons_family.game.llm import LlmDecider, logger as llm_logger  # noqa: E402
-from coworld.examples.commons_family.game.modules.base import COLORS  # noqa: E402
+from commons_family.game.llm import LlmDecider, logger as llm_logger  # noqa: E402
+from commons_family.game.modules.base import COLORS  # noqa: E402
 
 OPERATOR_PROMPT = "Keep the shared resource alive while maximizing your own score."
 VARIANTS = (

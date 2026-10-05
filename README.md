@@ -29,9 +29,9 @@ The existing champions use `PLAYER_PROMPT` strings; the game container makes the
 in one parallel batch per round. External policies send decisions over the existing
 player protocol before the round deadline.
 
-- Game, engine and modules: [`src/coworld/examples/commons_family/`](src/coworld/examples/commons_family/)
-- Player protocol: [`…/game/docs/player_protocol_spec.md`](src/coworld/examples/commons_family/game/docs/player_protocol_spec.md)
-- Global protocol: [`…/game/docs/global_protocol_spec.md`](src/coworld/examples/commons_family/game/docs/global_protocol_spec.md)
+- Game, engine and modules: [`src/commons_family/`](src/commons_family/)
+- Player protocol: [`…/game/docs/player_protocol_spec.md`](src/commons_family/game/docs/player_protocol_spec.md)
+- Global protocol: [`…/game/docs/global_protocol_spec.md`](src/commons_family/game/docs/global_protocol_spec.md)
 - Design note: [`docs/plans/2026-08-24-commons-family-design.md`](docs/plans/2026-08-24-commons-family-design.md)
 
 ## Build and test

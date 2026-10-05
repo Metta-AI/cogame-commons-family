@@ -31,8 +31,8 @@ tools/ci/docker_smoke.sh coworld-commons-family:latest   # one episode, six seat
 In-process, no containers:
 
 ```python
-from coworld.examples.commons_family.game.engine import CommonsConfig
-from coworld.examples.commons_family import headless
+from commons_family.game.engine import CommonsConfig
+from commons_family import headless
 
 config = CommonsConfig(module="mushrooms", rounds=20)
 state = headless.run_episode(

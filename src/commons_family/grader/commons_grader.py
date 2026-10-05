@@ -16,8 +16,8 @@ from itertools import combinations
 
 from pydantic import BaseModel
 
-from coworld.examples.commons_family.game.engine import CommonsConfig, module_for
-from coworld.examples.commons_family.shared.artifact_io import (
+from commons_family.game.engine import CommonsConfig, module_for
+from commons_family.shared.artifact_io import (
     JSON_CONTENT_TYPE,
     read_data,
     write_data,

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from coworld.examples.commons_family.game.modules.base import (
+from commons_family.game.modules.base import (
     Decision,
     Module,
     clamp_int,

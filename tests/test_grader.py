@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from coworld.examples.commons_family import headless
-from coworld.examples.commons_family.game.engine import (
+from commons_family import headless
+from commons_family.game.engine import (
     CommonsConfig,
     module_for,
     new_game,
@@ -19,8 +19,8 @@ from coworld.examples.commons_family.game.engine import (
     settle_round,
     welfare,
 )
-from coworld.examples.commons_family.game.modules.base import Decision
-from coworld.examples.commons_family.grader.commons_grader import (
+from commons_family.game.modules.base import Decision
+from commons_family.grader.commons_grader import (
     SCALE,
     build_grade,
     harvest_gini,
@@ -42,7 +42,7 @@ def episode(module_name: str, policies: list[str], seed: int = 20260824, rounds:
 
 
 def bundle(module_name: str, policies: list[str], seed: int = 20260824):
-    from coworld.examples.commons_family.game.engine import replay_payload  # noqa: PLC0415
+    from commons_family.game.engine import replay_payload  # noqa: PLC0415
 
     config, state, module, payload = episode(module_name, policies, seed)
     replay = replay_payload(

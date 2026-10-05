@@ -17,7 +17,7 @@ import math
 import random
 from typing import Any
 
-from coworld.examples.commons_family.game.modules.base import COLORS
+from commons_family.game.modules.base import COLORS
 
 # The steward's two tuned constants. Not guessed: `tools/tune_baselines.py`
 # sweeps them over a 6x6 grid, plays every combination through the four modules

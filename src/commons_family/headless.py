@@ -14,8 +14,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
-from coworld.examples.commons_family.game.baselines import make_baseline
-from coworld.examples.commons_family.game.engine import (
+from commons_family.game.baselines import make_baseline
+from commons_family.game.engine import (
     CommonsConfig,
     GameState,
     module_for,

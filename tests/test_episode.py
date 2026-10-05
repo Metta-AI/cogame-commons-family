@@ -19,8 +19,8 @@ from pathlib import Path
 
 import pytest
 
-from coworld.examples.commons_family import headless
-from coworld.examples.commons_family.game.engine import (
+from commons_family import headless
+from commons_family.game.engine import (
     END_REASONS,
     CommonsConfig,
     module_for,
@@ -31,7 +31,7 @@ from .conftest import EPISODE_POLICIES, build_config, run
 
 SERVER_PATH = (
     Path(__file__).resolve().parents[1]
-    / "src/coworld/examples/commons_family/game/server.py"
+    / "src/commons_family/game/server.py"
 )
 _COUNTER = itertools.count()
 
@@ -456,7 +456,7 @@ def test_the_player_retries_a_game_that_is_not_listening_yet(monkeypatch):
     seat as absent, which is how CI's first smoke replay ended up with two
     `no_submission` seats.
     """
-    from coworld.examples.commons_family.player import player  # noqa: PLC0415
+    from commons_family.player import player  # noqa: PLC0415
 
     attempts = {"n": 0}
 
@@ -473,7 +473,7 @@ def test_the_player_retries_a_game_that_is_not_listening_yet(monkeypatch):
 
 
 def test_the_player_gives_up_inside_its_window_rather_than_hanging(monkeypatch):
-    from coworld.examples.commons_family.player import player  # noqa: PLC0415
+    from commons_family.player import player  # noqa: PLC0415
 
     async def never(url, **kwargs):
         raise OSError("connection refused")
@@ -496,7 +496,7 @@ def test_the_spectate_loop_gives_up_instead_of_waiting_on_a_dead_game(monkeypatc
     closing its socket left the player container blocked on a read until the
     platform killed the pod.
     """
-    from coworld.examples.commons_family.player import player  # noqa: PLC0415
+    from commons_family.player import player  # noqa: PLC0415
 
     closed = {"n": 0}
 
@@ -526,7 +526,7 @@ def test_the_spectate_loop_gives_up_instead_of_waiting_on_a_dead_game(monkeypatc
 
 
 def test_the_registration_frame_prefers_the_scripted_baseline(monkeypatch):
-    from coworld.examples.commons_family.player import player  # noqa: PLC0415
+    from commons_family.player import player  # noqa: PLC0415
 
     monkeypatch.setenv("PLAYER_PROMPT", "take one apple")
     monkeypatch.setenv("PLAYER_SCRIPTED", "cleaner")

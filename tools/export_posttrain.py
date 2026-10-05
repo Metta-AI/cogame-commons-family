@@ -7,8 +7,8 @@ import json
 import subprocess
 from pathlib import Path
 
-from coworld.examples.commons_family.game.baselines import make_baseline
-from coworld.examples.commons_family.game.engine import (
+from commons_family.game.baselines import make_baseline
+from commons_family.game.engine import (
     CommonsConfig,
     module_for,
     new_game,
@@ -18,7 +18,7 @@ from coworld.examples.commons_family.game.engine import (
     results,
     settle_round,
 )
-from coworld.examples.commons_family.game.llm import LlmDecider
+from commons_family.game.llm import LlmDecider
 
 OPERATOR_PROMPT = "Keep the shared resource alive while maximizing your own score."
 

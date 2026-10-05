@@ -14,8 +14,8 @@ import random
 
 import pytest
 
-from coworld.examples.commons_family.game.baselines import BASELINES, make_baseline
-from coworld.examples.commons_family.game.engine import (
+from commons_family.game.baselines import BASELINES, make_baseline
+from commons_family.game.engine import (
     NOTE_MAX_CHARS,
     CommonsConfig,
     module_for,
@@ -24,7 +24,7 @@ from coworld.examples.commons_family.game.engine import (
     parse_decision,
     settle_round,
 )
-from coworld.examples.commons_family.game.modules.base import COLORS
+from commons_family.game.modules.base import COLORS
 
 CASES_PER_MODULE = 400
 MODULES = ["cleanup", "harvest", "allelopathic", "mushrooms"]
@@ -230,7 +230,7 @@ def test_open_room_stewards_spread_across_the_patches_instead_of_queueing():
     when BOTH partners name it and partners can only agree on a rule that does
     not read the seat.
     """
-    from coworld.examples.commons_family import headless  # noqa: PLC0415
+    from commons_family import headless  # noqa: PLC0415
 
     config = CommonsConfig(module="harvest", num_agents=6, rounds=1,
                            property_rights="open")
@@ -253,7 +253,7 @@ def test_open_room_stewards_spread_across_the_patches_instead_of_queueing():
 @pytest.mark.parametrize("module_name", MODULES)
 def test_the_steward_never_kills_the_resource_on_its_own(module_name):
     """Six stewards leave the commons standing at the end of a full episode."""
-    from coworld.examples.commons_family import headless  # noqa: PLC0415
+    from commons_family import headless  # noqa: PLC0415
 
     config = CommonsConfig(module=module_name, num_agents=6, rounds=20)
     state = headless.run_episode(config, headless.build_policies(["steward"] * 6))

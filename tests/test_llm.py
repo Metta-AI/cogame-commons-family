@@ -14,15 +14,15 @@ import time
 
 import pytest
 
-from coworld.examples.commons_family.game.baselines import make_baseline
-from coworld.examples.commons_family.game.engine import (
+from commons_family.game.baselines import make_baseline
+from commons_family.game.engine import (
     CommonsConfig,
     module_for,
     new_game,
     observation,
     parse_decision,
 )
-from coworld.examples.commons_family.game.llm import (
+from commons_family.game.llm import (
     LlmDecider,
     LlmThrottled,
     LlmTimeout,
@@ -348,8 +348,8 @@ def test_a_disabled_decider_never_touches_its_transport():
 
 
 def test_an_episode_with_no_credentials_still_finishes_complete():
-    from coworld.examples.commons_family import headless  # noqa: PLC0415
-    from coworld.examples.commons_family.game.engine import results  # noqa: PLC0415
+    from commons_family import headless  # noqa: PLC0415
+    from commons_family.game.engine import results  # noqa: PLC0415
 
     config, _, module = setup(rounds=4)
     decider = LlmDecider(config, module, transport=None, model="")

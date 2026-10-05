@@ -27,8 +27,8 @@ import uvicorn
 from fastapi import FastAPI, WebSocket
 from fastapi.responses import HTMLResponse
 
-from coworld.examples.commons_family.game.baselines import make_baseline
-from coworld.examples.commons_family.game.engine import (
+from commons_family.game.baselines import make_baseline
+from commons_family.game.engine import (
     PLAYER_PROTOCOL,
     PROMPT_MAX_RUNES,
     CommonsConfig,
@@ -43,13 +43,13 @@ from coworld.examples.commons_family.game.engine import (
     settle_round,
     truncate_runes,
 )
-from coworld.examples.commons_family.game.llm import LlmDecider
-from coworld.examples.commons_family.shared.artifact_io import (
+from commons_family.game.llm import LlmDecider
+from commons_family.shared.artifact_io import (
     artifact_method,
     read_data,
     write_data,
 )
-from coworld.examples.commons_family.shared.log_shipper import get_logger
+from commons_family.shared.log_shipper import get_logger
 
 CLIENT_DIR = Path(__file__).parent / "client"
 logger = get_logger("commons_family.game")

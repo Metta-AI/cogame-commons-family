@@ -603,7 +603,7 @@ example is renamed and the resource physics are factored out of the engine into 
 
 | path | from | change |
 |---|---|---|
-| `src/coworld/examples/commons_family/game/engine.py` | meadow `game/engine.py` | keeps the round loop, institutions (ledger, sanctions, chat, norm), `RoundRecord`, `welfare`, `observation`, `truncate_runes`; the single-stock physics move out to `modules/cleanup.py`; `observation` now takes aliases |
+| `src/commons_family/game/engine.py` | meadow `game/engine.py` | keeps the round loop, institutions (ledger, sanctions, chat, norm), `RoundRecord`, `welfare`, `observation`, `truncate_runes`; the single-stock physics move out to `modules/cleanup.py`; `observation` now takes aliases |
 | `…/game/modules/base.py` | new | the module protocol: `name`, `defaults`, `new_state(config, rng)`, `parse_decision(raw, slot, config, state)`, `resolve(state, decisions, config) -> (gains, events)`, `dynamics(state, config) -> events`, `observe(state, config, slot)`, `residual_value(state)`, `planner_optimum(config)` |
 | `…/game/modules/{cleanup,harvest,allelopathic,mushrooms}.py` | new (cleanup derives from meadow's stock code) | the four physics, exactly as specified above |
 | `…/game/llm.py` | meadow `player/policies.py:LlmPolicy` | moved server-side; truncated throttle ladder; per-call deadline; one parallel batch per round; retry-once-then-fallback |
@@ -673,7 +673,7 @@ a test.
 
 ### Game server
 
-`python -m coworld.examples.commons_family.game.server`, launched in the image through the shim
+`python -m commons_family.game.server`, launched in the image through the shim
 `/bin/commons-family` (a two-line `exec` script) so `tools/ci/docker_smoke.sh` works unmodified.
 Meadow's FastAPI routing is kept exactly: `GET /healthz`, `GET /client/player`,
 `GET /client/global`, `GET /client/admin`, websockets `/player?slot=N&token=T`, `/global`,
@@ -981,8 +981,8 @@ so the placeholder is `{{COMMONS_FAMILY_IMAGE}}`.
 **`Dockerfile`** — meadow's, unchanged in shape (python:3.12-slim, the same pinned
 fastapi/uvicorn/websockets/pydantic/numpy/boto3 line, the same `/app/coworld/examples/…` mirror),
 plus two shims so the CI smoke and the manifest have real entrypoints:
-`/bin/commons-family` → `exec python -m coworld.examples.commons_family.game.server` and
-`/bin/commons-family-player` → `exec python -m coworld.examples.commons_family.player.player`,
+`/bin/commons-family` → `exec python -m commons_family.game.server` and
+`/bin/commons-family-player` → `exec python -m commons_family.player.player`,
 both `chmod +x`. **`Dockerfile.replay-viewer`** is bullwhip's, verbatim except the workdir name and
 the module path (emscripten/emsdk 4.0.15, nimby 0.1.27, Nim 2.2.4).
 
@@ -998,7 +998,7 @@ maxItems: 6` on `tokens` and `players`; a `results_schema` covering every result
 `reason` an enum of exactly `["complete","deadline","no_players"]`.
 
 **`game.docs`** — `readme` `{"type":"text","value":"<the whole of
-src/coworld/examples/commons_family/README.md, inline>"}`, **inline text and not a `uri`**: the
+src/commons_family/README.md, inline>"}`, **inline text and not a `uri`**: the
 acceptance checklist spells this member out literally, and a reader of the manifest should not
 have to fetch a URL to read the game's own front page (a test asserts the value is byte-identical
 to the README). Plus `pages[]`: `rules.md` (the shared round and the scoring formula), `modules.md` (the four
@@ -1049,7 +1049,7 @@ per-event dwell ≈ **70 s of playback**, comfortably longer than the viewer smo
 | `random` | `PLAYER_SCRIPTED: "random"` | uniform legal decisions; the variance control |
 
 **Grader** (`grader[]`): `commons-grader`, same image,
-`run: ["python","-m","coworld.examples.commons_family.grader.commons_grader"]`.
+`run: ["python","-m","commons_family.grader.commons_grader"]`.
 
 **`tools/ci/policies.json`** (phase 40 mints these; **both champions are `PLAYER_PROMPT`**,
 fillers are the scripted baselines and must be distinct versions from the champions):

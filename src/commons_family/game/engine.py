@@ -21,13 +21,13 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-from coworld.examples.commons_family.game.modules.allelopathic import AllelopathicModule
-from coworld.examples.commons_family.game.modules.base import COLORS, Decision, Module
-from coworld.examples.commons_family.game.modules.cleanup import CleanupModule
-from coworld.examples.commons_family.game.modules.harvest import HarvestModule
-from coworld.examples.commons_family.game.modules.mushrooms import MushroomsModule
+from commons_family.game.modules.allelopathic import AllelopathicModule
+from commons_family.game.modules.base import COLORS, Decision, Module
+from commons_family.game.modules.cleanup import CleanupModule
+from commons_family.game.modules.harvest import HarvestModule
+from commons_family.game.modules.mushrooms import MushroomsModule
 
-PLAYER_PROTOCOL = "commons-family.player.v1"
+PLAYER_PROTOCOL = "commons-family.player.v2"
 REPLAY_PROTOCOL = "commons-family.replay.v1"
 REPLAY_FORMAT = "commons-family/1"
 COWORLD_NAME = "commons_family"

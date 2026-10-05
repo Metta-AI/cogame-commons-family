@@ -17,8 +17,8 @@ from pathlib import Path
 
 import pytest
 
-from coworld.examples.commons_family import headless
-from coworld.examples.commons_family.game.engine import EVENT_KINDS, CommonsConfig, module_for
+from commons_family import headless
+from commons_family.game.engine import EVENT_KINDS, CommonsConfig, module_for
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX = ROOT / "replay-viewer/index.html"
@@ -296,8 +296,8 @@ def test_the_wasm_module_requires_every_key_the_replay_writer_emits():
 
     config = CommonsConfig(module="cleanup", rounds=2)
     state = headless.run_episode(config, headless.build_policies(["steward"] * 6))
-    from coworld.examples.commons_family.game.engine import replay_payload  # noqa: PLC0415
-    from coworld.examples.commons_family.game.engine import results  # noqa: PLC0415
+    from commons_family.game.engine import replay_payload  # noqa: PLC0415
+    from commons_family.game.engine import results  # noqa: PLC0415
 
     module = module_for(config)
     payload = results(state, config, module, "complete", ["p"] * 6, 0)

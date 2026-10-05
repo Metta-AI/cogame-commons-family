@@ -6,13 +6,13 @@ import math
 
 import pytest
 
-from coworld.examples.commons_family.game.engine import (
+from commons_family.game.engine import (
     CommonsConfig,
     module_for,
     new_game,
     parse_decision,
 )
-from coworld.examples.commons_family.game.modules.base import Decision
+from commons_family.game.modules.base import Decision
 
 APPROX = 1e-9
 
@@ -265,7 +265,7 @@ def test_patch_ownership_stays_defined_when_the_counts_differ(patch_count, right
     one owner, every allowed set must stay inside the patch range, and the
     episode must still play.
     """
-    from coworld.examples.commons_family import headless  # noqa: PLC0415
+    from commons_family import headless  # noqa: PLC0415
 
     config = CommonsConfig(module="harvest", num_agents=6, rounds=8,
                            patch_count=patch_count, property_rights=rights)
