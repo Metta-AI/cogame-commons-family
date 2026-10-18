@@ -13,22 +13,24 @@ PYTHONPATH=src python tools/export_posttrain.py /tmp/commons-allelopathic 10 --v
 PYTHONPATH=src python tools/export_posttrain.py /tmp/commons-mushrooms 10 --variant mushrooms
 ```
 
-The exporter reads each certified `game_config` from
-`coworld_manifest_template.json`, runs ten complete games with the published
-steward player, and writes `train.jsonl`, `validation.jsonl`, and
-`manifest.json`. Seeds divisible by five go to validation, keeping each game
-entirely in one split. Every teacher reply passes the same parser and round
-settlement as hosted play. An existing output directory is rejected.
+The exporter reads each published configuration and completes every game with
+scripted steward proposals through the production parser and round settlement.
+It requires clean committed source and a new output directory. It writes private
+`trajectories.jsonl` and `manifest.json`, both with mode `0600`; it does not
+produce admitted training rows. Proposals changed by normalization remain
+unselected. Exact prompt hashes, submitted responses, normalized actions, and
+final outcomes remain linked.
 
-Train the text policy with Metta's post-training CLI:
+Use `--prompt-variant canonical|plain|numbered|questions|reordered|mixed` and
+`--prompt-seed` to collect matched wording panels. Mixed selection requires the
+seed explicitly. Held-out wording is rejected by this training-candidate export.
+Seed families exclude both game variant and wording, so one scenario cannot leak
+across splits through a different resource module or paraphrase. Output streams
+one decision at a time rather than retaining the full campaign in memory.
 
-```bash
-uv run python -m metta_posttrain.train --dataset /tmp/commons-cleanup \
-  --output /tmp/commons-model --model Qwen/Qwen2.5-0.5B-Instruct \
-  --max-steps 100 --max-length 4096
-```
-
-The dataset imitates scripted play; its loss does not measure policy quality.
+Validate and convert these events through the shared Coworld decision-trajectory
+SDK and Metta importer. External teacher review and split assignment remain
+required before training. Scripted imitation is not evidence of policy quality.
 
 # Numeric reinforcement learning
 
@@ -51,3 +53,61 @@ state and ledger, own score, and own last gain. Their widths are 87 for Clean
 Up, 137 for Harvest, 91 for Allelopathic, and 92 for Mushrooms. Public chat,
 posted norms, and private notes remain available to the text post-training
 path; the numeric policy does not emit text.
+
+## Episode-stable prompt wording
+
+Hosted configurations accept `promptVariant` and `promptSeed`. Five training
+wordings are available: `canonical`, `plain`, `numbered`, `questions`, and
+`reordered`. `mixed` requires an explicit nonnegative prompt seed and selects
+training wording by `seed % 5`. Selection does not consume resource randomness
+or change identities, sanctions, module rules, action schemas, or standing orders.
+The canonical introduction remains the default. The shared score description
+now states accumulated module payoff, including mushroom externalities, minus
+sanctions; game scoring itself is unchanged.
+
+`heldout-briefing` and `heldout-reference` are evaluation-only. Freeze training
+choices before using these wordings. The language bridge rejects them under
+`split: train`; use `split: validation` or `split: test`.
+
+`PYTHONPATH=src:. python tools/text_bridge.py --variant cleanup` exposes production
+text decisions through the JSONL reset/teacher/step protocol. Reset requires
+`players: 6` and a scenario `seed`; it accepts the same prompt selector fields.
+Each round queues six normalized decisions against unchanged private views, then
+settles them together through the real engine. Notes stay private, chat becomes
+visible next round, and accepted directives describe normalized submissions,
+not guaranteed resource gains. The numeric bridge retains its existing actions
+and observation widths. The text bridge's steward teacher is scripted imitation,
+not an expert label or evidence of learned policy quality.
+
+Private semantic views expose the prompt bank, selected wording, seed, and hashes
+of the exact system and user messages. Keep all wordings and module variants of
+a scenario family in one data split. Compare base, canonical-trained, and
+mixed-trained checkpoints with identical scenario seeds, seats, partners,
+modules, and inference budgets. Report malformed replies, normalized proposals,
+fallbacks, incomplete games, per-seat scores, and welfare separately.
+
+Run `PYTHONPATH=src:. python -m pytest tests/test_prompt_games.py -q` for complete
+matched games across all six published variants, including private-note,
+next-round chat, normalized-sanction, and held-out training checks.
+
+Native private capture uses `COMMONS_FAMILY_TRACE_PATH`, an exclusive new JSONL
+file with mode `0600`. Optional `COWORLD_EPISODE_ID` and
+`COWORLD_SOURCE_REVISION` identify the episode and source; absent values remain
+null. Records include exact transmitted messages, assistant prefill, prompt
+hashes, raw replies, parsing outcomes, and every actual throttle or outer retry.
+Budget skips do not invent inference calls. Credentials are excluded.
+
+The host records the final proposal and normalized action separately. A model
+attempt is selected only when its reply supplies the host decision. A player-side
+override removes that selection, and fallback actions have no selected attempt.
+Selection is not dataset admission: normalized or overridden proposals require
+inspection and cannot be silently substituted for accepted labels. Serving call
+IDs and behavior log probabilities remain null when unavailable.
+
+`PYTHONPATH=src:. python tools/test_prompt_native_games.py --output /absolute/new/path`
+runs 24 ordinary native episodes with six real WebSocket players. Every published
+variant covers canonical and mixed selection; allelopathic and mushrooms also
+cover all seven direct wordings. A reserved, non-listening local endpoint tests
+actual transport failures, retries, budget skips, and fallback evidence without
+paid inference. The 20-round horizon, pacing, request budgets, and shutdown linger
+remain unchanged. `--smoke` selects two complete mushroom games for CI.
