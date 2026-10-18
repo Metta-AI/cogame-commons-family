@@ -61,6 +61,9 @@ jobs:
       - name: Run tests
         run: PYTHONPATH=src python -m pytest tests/ -v
 
+      - name: Complete native prompt episodes
+        run: PYTHONPATH=src:. python tools/test_prompt_native_games.py --smoke --output "$RUNNER_TEMP/prompt-native"
+
   # ---------------------------------------------------------------------
   # Packaging smoke: the production image builds, and one real episode runs
   # end to end in raw docker with the certification fixture's seat mix.

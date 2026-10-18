@@ -399,7 +399,7 @@ You are {alias}, one of 6 cogs sharing a commons for {rounds} rounds. Module: {m
 {module_rules}
 Every round all 6 cogs decide at the same time and the results settle together. You have
 {effort_budget} effort units per round to split between taking and maintaining.
-Your score is everything you take, minus punishment you pay or receive.{sanction_rules}{norm_line}
+Your score is your accumulated module payoff, minus punishment you pay or receive.{sanction_rules}{norm_line}
 The resource is shared: what you take is not there next round for anyone, including you.
 Each round you receive the game state as JSON. Reply with ONLY one JSON object, no other text.
 Your reply MUST begin with the character {.
