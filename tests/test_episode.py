@@ -22,11 +22,12 @@ import pytest
 from coworld.examples.commons_family import headless
 from coworld.examples.commons_family.game.engine import (
     END_REASONS,
+    CommonsConfig,
     module_for,
     results,
 )
 
-from .conftest import build_config, run
+from .conftest import EPISODE_POLICIES, build_config, run
 
 SERVER_PATH = (
     Path(__file__).resolve().parents[1]
@@ -317,7 +318,7 @@ def test_a_transport_that_raises_settles_the_episode_with_fallbacks(tmp_path, mo
         module.session.registrations[slot] = {"prompt": "take one apple", "scripted": ""}
 
     class RejectingTransport:
-        def complete(self, body, timeout, slot, entry, evidence):
+        def complete(self, body, timeout, slot):
             raise HTTPError("https://api.anthropic.com/v1/messages", 401,
                             "Unauthorized", {}, None)
 

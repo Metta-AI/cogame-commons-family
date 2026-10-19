@@ -22,9 +22,8 @@ from coworld.examples.commons_family.game.engine import (
     CommonsConfig,
     truncate_runes,
 )
-from coworld.examples.commons_family.game.evidence import InferenceAttempt, PrivateEvidence
 from coworld.examples.commons_family.game.modules.base import Module
-from coworld.examples.commons_family.game.prompts import CANONICAL_SELECTION, PromptSelection
+from coworld.examples.commons_family.game.prompts import CANONICAL_SELECTION, SYSTEM_TEMPLATES, PromptSelection
 from coworld.examples.commons_family.shared.log_shipper import get_logger
 
 logger = get_logger("commons_family.llm")
@@ -39,15 +38,6 @@ RETRY_HINT = (
     "Your last reply was not usable. Reply with ONE JSON object beginning with { "
     "and only the fields in the schema."
 )
-
-SYSTEM_TEMPLATE = """{module_rules}
-Every round all {num_players} cogs decide at the same time and the results settle together. You have
-{effort_budget} effort units per round to split between taking and maintaining.
-Your score is your accumulated module payoff, minus punishment you pay or receive.{sanction_rules}{norm_line}
-The resource is shared: what you take is not there next round for anyone, including you.
-Each round you receive the game state as JSON. Reply with ONLY one JSON object, no other text.
-Your reply MUST begin with the character {{.
-Schema: {schema_line}"""
 
 SANCTION_RULES = (
     "\nYou may also sanction one cog per round: you pay {cost}, they lose {burn}."
@@ -86,15 +76,13 @@ class MessagesTransport:
         self.api_key = api_key
         self.base = base.rstrip("/")
 
-    def complete(self, body: dict, timeout: float, slot: int, entry: InferenceAttempt, evidence: PrivateEvidence) -> str:
+    def complete(self, body: dict, timeout: float, slot: int) -> str:
         payload = {
             "model": self.model,
             "max_tokens": body["max_tokens"],
             "system": body["system"],
             "messages": body["messages"],
         }
-        entry.request = payload
-        evidence.write(entry)
         request = Request(
             f"{self.base}/v1/messages",
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -108,21 +96,15 @@ class MessagesTransport:
         )
         try:
             with urlopen(request, timeout=timeout) as response:
-                entry.raw_response = response.read().decode("utf-8")
-                content = json.loads(entry.raw_response)["content"]
-                entry.response = next((block["text"] for block in content if block["type"] == "text"), "")
-                return entry.response
+                content = json.load(response)["content"]
+                return next((block["text"] for block in content if block["type"] == "text"), "")
         except HTTPError as error:
-            entry.raw_response = error.read().decode("utf-8", errors="replace")
-            entry.outcome = f"http:{error.code}"
             if error.code in (429, 529):
                 raise LlmThrottled(str(error.code)) from error
             raise
         except TimeoutError as error:
-            entry.outcome = "timeout"
             raise LlmTimeout(str(error)) from error
         except URLError as error:
-            entry.outcome = "transport"
             if isinstance(error.reason, TimeoutError):
                 raise LlmTimeout(str(error)) from error
             raise LlmTransportError(str(error)) from error
@@ -220,9 +202,6 @@ class LlmDecider:
         self.transport = transport
         self.model = model or DEFAULT_ANTHROPIC_MODEL
         self.requests = 0
-        self.evidence = PrivateEvidence()
-        self.last_attempt: dict[tuple[int, int], int] = {}
-        self.selected_attempt: dict[tuple[int, int], int] = {}
         self._systems: dict[int, str] = {}
         self._budget: deque[float] = deque()
         self._lock = threading.Lock()
@@ -244,7 +223,7 @@ class LlmDecider:
         norm_line = f"\nPosted norm: {obs['norm_text']}" if obs["norm_text"] else ""
         prompt = self.prompt_selection.introduction(
             obs["alias"], obs["num_players"], obs["rounds"], obs["module"]
-        ) + SYSTEM_TEMPLATE.format(
+        ) + SYSTEM_TEMPLATES[self.prompt_selection.selected].format(
             alias=obs["alias"],
             num_players=obs["num_players"],
             rounds=obs["rounds"],
@@ -298,7 +277,7 @@ class LlmDecider:
         for attempt in range(2):
             text = user if attempt == 0 else f"{user}\n\n{RETRY_HINT}"
             try:
-                raw = self._complete(system, text, deadline, slot, obs["round"])
+                raw = self._complete(system, text, deadline, slot)
             except LlmRateBudget:
                 return None, "rate_budget"
             except LlmTimeout:
@@ -330,11 +309,10 @@ class LlmDecider:
                 logger.warning("slot %d unusable reply: %r", slot, raw[:200])
                 cause = "parse"
                 continue
-            self.selected_attempt[obs["round"], slot] = self.last_attempt[obs["round"], slot]
             return parsed, ""
         return None, cause
 
-    def _complete(self, system: str, user: str, deadline: float, slot: int, round_number: int) -> str | None:
+    def _complete(self, system: str, user: str, deadline: float, slot: int) -> str | None:
         # Pre-4.6 models narrate their analysis and never reach the JSON unless
         # an assistant prefill forces the reply to BE the JSON object. 4.6+
         # models reject prefill and need max_tokens headroom instead.
@@ -357,29 +335,13 @@ class LlmDecider:
             timeout = min(self.config.decision_timeout_seconds, remaining)
             if not self._take_budget():
                 raise LlmRateBudget("requests-per-minute budget spent")
-            key = round_number, slot
-            self.last_attempt[key] = self.last_attempt[key] + 1 if key in self.last_attempt else 0
-            entry = InferenceAttempt(
-                round=round_number, slot=slot, attempt=self.last_attempt[key], model=self.model,
-                prompt=[{"role": "system", "content": system}, *messages],
-                prompt_template=self.prompt_selection.metadata(system, user),
-            )
             try:
-                completion = self.transport.complete(body, timeout, slot, entry, self.evidence)  # type: ignore[union-attr]
-                if completion is not None:
-                    entry.response_with_prefill = "{" + completion if prefill else completion
-                    entry.parsed_reply = extract_json(entry.response_with_prefill)
-                    entry.outcome = "parsed" if entry.parsed_reply is not None else "parse"
-                else:
-                    entry.outcome = "no_response"
+                completion = self.transport.complete(body, timeout, slot)  # type: ignore[union-attr]
             except LlmThrottled:
                 if sleep_seconds is None:
                     raise
                 time.sleep(min(sleep_seconds, max(0.0, deadline - time.monotonic())))
                 continue
-            finally:
-                entry.kind = "inference_finished"
-                self.evidence.write(entry)
             if completion is None:
                 return None
             return "{" + completion if prefill else completion

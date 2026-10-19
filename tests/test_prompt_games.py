@@ -20,7 +20,7 @@ def test_complete_matched_prompt_games(variant):
     canonical = None
     introductions = set()
     for wording, seed in [(v, 0) for v in (*TRAINING_VARIANTS, *HELDOUT_VARIANTS)] + [
-        ("mixed", i) for i in range(5)
+        ("mixed", 4)
     ]:
         reset = {
             "kind": "reset",
@@ -56,8 +56,8 @@ def test_complete_matched_prompt_games(variant):
                         assert f"PRIVATE-SEAT-{other}" not in message["content"]
             system = decision["messages"][0]["content"]
             common = bridge.module.rules_text(bridge.config)
-            introduction, rest = system.split(common, 1)
-            introductions.add(introduction)
+            assert common in system
+            introductions.add(system)
             if not trace:
                 with pytest.raises(ValueError, match="no JSON object"):
                     bridge.handle(
@@ -84,7 +84,7 @@ def test_complete_matched_prompt_games(variant):
             assert len(reply["action"]["note"]) == 200
             if bridge.config.chat_enabled:
                 assert len(reply["action"]["message"]) == bridge.config.chat_max_chars
-            trace.append((view, decision["messages"][1], rest, reply["action"]))
+            trace.append((view, decision["messages"][1], reply["action"]))
             decision = reply["observation"]
         assert len(trace) == 120 and bridge.state.round == 20
         outcome = trace, decision

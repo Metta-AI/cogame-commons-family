@@ -22,7 +22,6 @@ from coworld.examples.commons_family.game.engine import (
     observation,
     parse_decision,
 )
-from coworld.examples.commons_family.game.evidence import InferenceAttempt, PrivateEvidence
 from coworld.examples.commons_family.game.llm import (
     LlmDecider,
     LlmThrottled,
@@ -43,7 +42,7 @@ class StubTransport:
         self.barrier = barrier
         self.lock = threading.Lock()
 
-    def complete(self, body: dict, timeout: float, slot: int, entry, evidence) -> str:
+    def complete(self, body: dict, timeout: float, slot: int) -> str:
         if self.barrier is not None:
             # Times out (BrokenBarrierError) unless every seat is here at once.
             self.barrier.wait(timeout=5.0)
@@ -59,7 +58,7 @@ class StubTransport:
 class ExplodingTransport:
     """Any use at all is a failure: the no-credentials path must not call out."""
 
-    def complete(self, body: dict, timeout: float, slot: int, entry, evidence) -> str:  # pragma: no cover
+    def complete(self, body: dict, timeout: float, slot: int) -> str:  # pragma: no cover
         raise AssertionError("the disabled client made a network call")
 
 
@@ -206,7 +205,7 @@ def test_an_unclassified_exception_in_one_seat_does_not_stop_the_batch():
             self.calls = 0
             self.lock = threading.Lock()
 
-        def complete(self, body: dict, timeout: float, slot: int, entry, evidence) -> str:
+        def complete(self, body: dict, timeout: float, slot: int) -> str:
             with self.lock:
                 self.calls += 1
                 boom = self.calls % 3 == 0
@@ -429,7 +428,7 @@ def test_hosted_transport_posts_native_messages_with_seat_attribution(monkeypatc
     try:
         transport, model = build_transport()
         for slot in (0, 1):
-            assert transport.complete({"model": model, "max_tokens": 64, "system": "rules", "messages": [{"role": "user", "content": "view"}]}, 5, slot, InferenceAttempt(round=0, slot=slot, attempt=0, model=model, prompt=[], prompt_template={}), PrivateEvidence()) == "ok"
+            assert transport.complete({"model": model, "max_tokens": 64, "system": "rules", "messages": [{"role": "user", "content": "view"}]}, 5, slot) == "ok"
     finally:
         server.shutdown()
         server.server_close()

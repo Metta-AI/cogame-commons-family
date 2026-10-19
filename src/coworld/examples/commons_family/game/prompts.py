@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 TRAINING_VARIANTS = ("canonical", "plain", "numbered", "questions", "reordered")
 HELDOUT_VARIANTS = ("heldout-briefing", "heldout-reference")
-BANK_VERSION = "commons-family-rules-v1"
+BANK_VERSION = "commons-family-rules-v2"
 
 
 class PromptSelection(BaseModel):
@@ -65,3 +65,67 @@ class PromptSelection(BaseModel):
 
 
 CANONICAL_SELECTION = PromptSelection()
+
+
+SYSTEM_TEMPLATES = {
+    "canonical": """{module_rules}
+Every round all {num_players} cogs decide at the same time and the results settle together. You have
+{effort_budget} effort units per round to split between taking and maintaining.
+Your score is your accumulated module payoff, minus punishment you pay or receive.{sanction_rules}{norm_line}
+The resource is shared: what you take is not there next round for anyone, including you.
+Each round you receive the game state as JSON. Reply with ONLY one JSON object, no other text.
+Your reply MUST begin with the character {{.
+Schema: {schema_line}""",
+    "plain": """{module_rules}
+All {num_players} cogs choose simultaneously each round, and their choices settle together. Divide your
+{effort_budget} effort units between taking and maintaining. Score is accumulated module payoff less
+punishment you pay or receive.{sanction_rules}{norm_line}
+Taking depletes a shared resource: what you take will be unavailable next round to everybody, yourself
+included.
+Each round you receive the game state as JSON. Reply with ONLY one JSON object, no other text.
+Your reply MUST begin with the character {{.
+Schema: {schema_line}""",
+    "numbered": """{module_rules}
+Round procedure:
+1. All {num_players} cogs choose simultaneously; outcomes settle together.
+2. Allocate {effort_budget} effort units to taking and maintaining each round.
+3. Accumulate module payoff, subtracting punishment you pay or receive.{sanction_rules}{norm_line}
+4. The resource is shared. Taking removes resources from next round for all cogs, including you.
+Each round you receive the game state as JSON. Reply with ONLY one JSON object, no other text.
+Your reply MUST begin with the character {{.
+Schema: {schema_line}""",
+    "questions": """{module_rules}
+When do choices happen? All {num_players} cogs decide simultaneously every round; results settle together.
+What can you allocate? {effort_budget} effort units between taking and maintaining per round. What is your
+score? Accumulated module payoff minus punishment paid or received.{sanction_rules}{norm_line}
+Why does taking affect later rounds? The resource is shared; what you take cannot be there next round for
+anyone, including yourself.
+Each round you receive the game state as JSON. Reply with ONLY one JSON object, no other text.
+Your reply MUST begin with the character {{.
+Schema: {schema_line}""",
+    "reordered": """Your score is accumulated module payoff minus punishment you pay or receive.{sanction_rules}{norm_line}
+{module_rules}
+The commons is shared. Resources you take are unavailable next round to every cog, including you. Each round
+split {effort_budget} effort units between taking and maintaining. All {num_players} cogs decide at once and
+their results settle together.
+Each round you receive the game state as JSON. Reply with ONLY one JSON object, no other text.
+Your reply MUST begin with the character {{.
+Schema: {schema_line}""",
+    "heldout-briefing": """{module_rules}
+Decision briefing: {num_players} cogs choose at the same time each round, followed by joint settlement.
+Allocate {effort_budget} effort units per round between taking and maintaining.
+Payoff briefing: score accumulates module payoff, less punishment you pay or
+receive.{sanction_rules}{norm_line}
+Resource briefing: the commons is shared. What you take is missing next round for others and for you.
+Each round you receive the game state as JSON. Reply with ONLY one JSON object, no other text.
+Your reply MUST begin with the character {{.
+Schema: {schema_line}""",
+    "heldout-reference": """{module_rules}
+Timing: simultaneous decisions by all {num_players} cogs; results settle together. Effort: {effort_budget}
+units per round, divided between taking and maintaining. Score: accumulated module payoff less punishment paid
+or received.{sanction_rules}{norm_line}
+Shared-resource consequence: anything you take is absent next round for everyone, including yourself.
+Each round you receive the game state as JSON. Reply with ONLY one JSON object, no other text.
+Your reply MUST begin with the character {{.
+Schema: {schema_line}""",
+}

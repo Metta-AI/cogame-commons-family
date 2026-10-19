@@ -1,20 +1,31 @@
-"""Export complete games as private candidate evidence for shared review and admission."""
+"""Export complete certified Commons Family games for Metta post-training."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 from pathlib import Path
 
-from coworld.examples.commons_family.game.engine import results
-from coworld.examples.commons_family.game.llm import logger
+from coworld.examples.commons_family.game.baselines import make_baseline
+from coworld.examples.commons_family.game.engine import (
+    CommonsConfig,
+    module_for,
+    new_game,
+    observation,
+    open_round,
+    parse_decision,
+    results,
+    settle_round,
+)
+from coworld.examples.commons_family.game.llm import LlmDecider
 from coworld.examples.commons_family.game.prompts import (
+    BANK_VERSION,
     HELDOUT_VARIANTS,
     PromptSelection,
 )
-from tools.text_bridge import TextBridge
+
+OPERATOR_PROMPT = "Keep the shared resource alive while maximizing your own score."
 
 
 def main() -> None:
@@ -26,156 +37,130 @@ def main() -> None:
     parser.add_argument("--prompt-variant", default="canonical")
     parser.add_argument("--prompt-seed", type=int)
     args = parser.parse_args()
-    if args.games < 10 or args.first_seed < 1:
-        parser.error("at least ten games and a positive first seed are required")
     selector = {"promptVariant": args.prompt_variant}
     if args.prompt_seed is not None:
         selector["promptSeed"] = args.prompt_seed
-    selection = PromptSelection.model_validate(selector)
-    if selection.selected in HELDOUT_VARIANTS:
+    initial_selection = PromptSelection.model_validate(selector)
+    if initial_selection.selected in HELDOUT_VARIANTS:
         parser.error("held-out wording is evaluation-only")
-    root = Path(__file__).resolve().parents[1]
-    if subprocess.check_output(
-        ["git", "status", "--porcelain"], cwd=root, text=True
-    ).strip():
-        raise ValueError(
-            "Commit qualified source before generating a pinned candidate corpus"
-        )
-    revision = subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], cwd=root, text=True
-    ).strip()
-    bridge = TextBridge(args.variant)
-    logger.disabled = True
+    if subprocess.check_output(["git", "status", "--porcelain"], text=True).strip():
+        raise ValueError("commit source before export")
+    if args.games < 10 or args.first_seed < 1:
+        parser.error("at least ten games and a positive first seed are required")
+
+    manifest = json.loads(Path("coworld_manifest_template.json").read_text())
+    variants = {entry["id"]: entry["game_config"] for entry in manifest["variants"]}
+    if args.variant not in variants:
+        parser.error(f"unknown variant: {args.variant}")
     args.output.mkdir(parents=True, exist_ok=False, mode=0o700)
-    descriptor = os.open(
-        args.output / "trajectories.jsonl", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
-    )
-    runs = []
-    with os.fdopen(descriptor, "w") as stream:
-        for seed in range(args.first_seed, args.first_seed + args.games):
-            family = f"commons-family-{seed}"
-            episode = f"{family}-{args.variant}-{selection.selected}-{selection.seed}"
-            shared = {
-                "episode_id": episode,
-                "game": "commons-family",
-                "game_version": f"source-{revision}",
-                "source_revision": revision,
-            }
-            decision = bridge.handle(
-                {
-                    "kind": "reset",
-                    "seed": str(seed),
-                    "players": 6,
-                    **selection.model_dump(by_alias=True),
-                }
+    revision = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    train_rows: list[str] = []
+    validation_rows: list[str] = []
+    runs: list[dict] = []
+
+    for seed in range(args.first_seed, args.first_seed + args.games):
+        selection = initial_selection
+        if selection.variant == "mixed":
+            selection = selection.model_copy(
+                update={"seed": selection.seed + seed - args.first_seed}
             )
-            count = 0
-            while decision["kind"] == "decision":
-                response = bridge.handle({"kind": "teacher"})["response"]
-                proposal = json.loads(response)
-                resolved = bridge.handle(
-                    {
-                        "kind": "step",
-                        "decision_id": decision["decision_id"],
-                        "response": response,
-                    }
+        config = CommonsConfig.model_validate(variants[args.variant] | {"seed": seed})
+        module = module_for(config)
+        decider = LlmDecider(config, module, transport=None, prompt_selection=selection)
+        state = new_game(config)
+        policies = [
+            make_baseline("steward", seed=seed * 1000 + slot)
+            for slot in range(config.num_agents)
+        ]
+        rows: list[str] = []
+        normalized = 0
+        for _ in range(config.rounds):
+            open_round(state, config, module)
+            decisions = []
+            for slot, policy in enumerate(policies):
+                obs = observation(state, config, slot, module)
+                completion = policy.act(obs)
+                decision = parse_decision(
+                    completion, slot, config, state, module, "scripted:steward"
                 )
-                action = resolved["action"]
-                accepted = all(
-                    field in action and action[field] == value
-                    for field, value in proposal.items()
-                )
-                attempt_id = f"{count}-teacher"
-                rejection = None if accepted else "engine-normalized-submission"
-                row = {
-                    **shared,
-                    "schema_version": "1",
-                    "event_type": "decision",
-                    "decision_id": str(count),
-                    "decision_index": count,
-                    "seat": str(decision["seat"]),
-                    "visibility": "private",
-                    "observation": decision["semantic_view"],
-                    "prompt": decision["messages"],
-                    "attempts": [
+                decisions.append(decision)
+                action = {
+                    field: getattr(decision, field)
+                    for field in decision.__slots__
+                    if field != "src"
+                }
+                if any(
+                    field not in action or action[field] != value
+                    for field, value in completion.items()
+                ):
+                    normalized += 1
+                    continue
+                rows.append(
+                    json.dumps(
                         {
-                            "attempt_id": attempt_id,
-                            "policy": "scripted-steward",
-                            "origin": "teacher",
-                            "prompt": decision["messages"],
-                            "response": response,
-                            "parsed_action": action,
-                            "accepted": accepted,
-                            "rejection_reason": rejection,
-                        }
-                    ],
-                    "selected_attempt_id": attempt_id if accepted else None,
-                    "executed_action": action,
-                    "action_status": "accepted" if accepted else "fallback",
-                    "fallback_origin": rejection,
-                    "terminal": resolved["observation"]["kind"] == "terminal",
-                }
-                stream.write(json.dumps(row, ensure_ascii=False) + "\n")
-                decision = resolved["observation"]
-                count += 1
-            assert (
-                bridge.state.round == bridge.config.rounds
-                and count == bridge.config.rounds * 6
-            )
-            outcome = results(
-                bridge.state,
-                bridge.config,
-                bridge.module,
-                "complete",
-                ["steward"] * 6,
-                0,
-            )
-            stream.write(
-                json.dumps(
-                    {
-                        **shared,
-                        "schema_version": "1",
-                        "event_type": "episode",
-                        "seed_family": family,
-                        "status": "completed",
-                        "outcome": outcome,
-                        "participant_outcomes": {
-                            str(i): {"score": score}
-                            for i, score in enumerate(outcome["scores"])
+                            "episode_id": f"commons-family-{args.variant}-{seed}-{selection.selected}-{selection.seed}",
+                            "seed": f"commons-family-{seed}",
+                            "decision_id": state.round * config.num_agents + slot,
+                            "prompt": [
+                                {
+                                    "role": "system",
+                                    "content": decider.system_prompt(
+                                        obs, OPERATOR_PROMPT
+                                    ),
+                                },
+                                {"role": "user", "content": decider.user_message(obs)},
+                            ],
+                            "completion": [
+                                {"role": "assistant", "content": json.dumps(completion)}
+                            ],
+                            "game": "commons-family",
+                            "action_schema_revision": "commons-family-decision-v1",
                         },
-                    },
-                    ensure_ascii=False,
+                        ensure_ascii=False,
+                    )
                 )
-                + "\n"
-            )
-            runs.append(
-                {
-                    "seed": seed,
-                    "decisions": count,
-                    "scores": outcome["scores"],
-                    "rounds": bridge.state.round,
-                }
-            )
-    descriptor = os.open(
-        args.output / "manifest.json", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
-    )
-    with os.fdopen(descriptor, "w") as stream:
-        json.dump(
+            settle_round(state, decisions, config, module)
+        assert state.round == config.rounds
+        outcome = results(
+            state, config, module, "complete", ["steward"] * config.num_agents, 0
+        )
+        (validation_rows if seed % 5 == 0 else train_rows).extend(rows)
+        runs.append(
+            {
+                "prompt_selection": {
+                    "bank": BANK_VERSION,
+                    "variant": selection.selected,
+                    "selection": selection.variant,
+                    "seed": selection.seed,
+                },
+                "normalized_proposals": normalized,
+                "seed": seed,
+                "decisions": len(rows),
+                "scores": outcome["scores"],
+                "rounds": state.round,
+            }
+        )
+
+    (args.output / "train.jsonl").write_text("\n".join(train_rows) + "\n")
+    (args.output / "validation.jsonl").write_text("\n".join(validation_rows) + "\n")
+    (args.output / "manifest.json").write_text(
+        json.dumps(
             {
                 "schema_version": 1,
                 "game": "commons-family",
                 "variant": args.variant,
                 "source_revision": revision,
                 "teacher": "scripted-steward",
-                "prompt_selection": selection.model_dump(by_alias=True),
-                "split_authority": "shared Coworld SDK and application importer by seed_family",
+                "operator_prompt": OPERATOR_PROMPT,
+                "train_examples": len(train_rows),
+                "validation_examples": len(validation_rows),
                 "runs": runs,
             },
-            stream,
             indent=2,
         )
-        stream.write("\n")
-    print(f"complete candidate games={len(runs)}")
+        + "\n"
+    )
+    print(f"train={len(train_rows)} validation={len(validation_rows)}")
 
 
 if __name__ == "__main__":

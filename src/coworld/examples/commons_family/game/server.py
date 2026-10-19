@@ -43,7 +43,6 @@ from coworld.examples.commons_family.game.engine import (
     settle_round,
     truncate_runes,
 )
-from coworld.examples.commons_family.game.evidence import EpisodeEnd, HostDecision
 from coworld.examples.commons_family.game.llm import LlmDecider
 from coworld.examples.commons_family.game.prompts import PromptSelection
 from coworld.examples.commons_family.shared.artifact_io import (
@@ -520,13 +519,6 @@ async def _run_episode() -> str:
                 parse_decision(raw[slot], slot, CONFIG, engine, MODULE, src.get(slot, "pass"))
             )
 
-        for slot, decision in enumerate(decisions):
-            session.decider.evidence.write(HostDecision(
-                round=engine.round, slot=slot, source=decision.src,
-                selected_attempt=session.decider.selected_attempt[engine.round, slot] if decision.src == "llm" else None,
-                proposal=raw[slot] if slot in raw else {},
-                action={field: getattr(decision, field) for field in decision.__slots__ if field != "src"},
-            ))
         settle_round(engine, decisions, CONFIG, MODULE)
 
     return reason
@@ -552,7 +544,6 @@ async def _finish(reason: str) -> None:
     payload = results(
         engine, CONFIG, MODULE, reason, PLAYER_NAMES, session.decider.requests
     )
-    session.decider.evidence.write(EpisodeEnd(status="completed" if reason == "complete" else "truncated", results=payload))
     logger.info("episode finished: reason=%s scores=%s", reason, payload["scores"])
 
     # Artifact writes are blocking HTTP; off the event loop so websocket pings
