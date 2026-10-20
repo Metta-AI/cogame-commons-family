@@ -57,10 +57,10 @@ reply schema, and the manifest's `policies.md` page for the short version.
 
 ## Where the LLM lives
 
-In the **game** container, not the player container. Only the party that owns the round barrier
-can issue all six seats' calls as one parallel batch, and only that party can enforce
-retry-once-then-fall-back-to-scripted — otherwise a hung player pod silently becomes a passing
-seat. The player container registers a policy and spectates.
+Registered `PLAYER_PROMPT` policies run in the **game** container. It batches their calls in
+parallel and retries once before falling back to a scripted policy. The bundled player registers
+its policy and spectates. External players may send `decision` messages; submissions received
+before the round settles override that seat's game-container answer.
 
 ## Layout
 
