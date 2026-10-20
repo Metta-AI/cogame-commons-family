@@ -23,6 +23,7 @@ from coworld.examples.commons_family.game.engine import (
     truncate_runes,
 )
 from coworld.examples.commons_family.game.modules.base import Module
+from coworld.examples.commons_family.game.prompts import CANONICAL_SELECTION, SYSTEM_TEMPLATES, PromptSelection
 from coworld.examples.commons_family.shared.log_shipper import get_logger
 
 logger = get_logger("commons_family.llm")
@@ -37,16 +38,6 @@ RETRY_HINT = (
     "Your last reply was not usable. Reply with ONE JSON object beginning with { "
     "and only the fields in the schema."
 )
-
-SYSTEM_TEMPLATE = """You are {alias}, one of {num_players} cogs sharing a commons for {rounds} rounds. Module: {module}.
-{module_rules}
-Every round all {num_players} cogs decide at the same time and the results settle together. You have
-{effort_budget} effort units per round to split between taking and maintaining.
-Your score is everything you take, minus punishment you pay or receive.{sanction_rules}{norm_line}
-The resource is shared: what you take is not there next round for anyone, including you.
-Each round you receive the game state as JSON. Reply with ONLY one JSON object, no other text.
-Your reply MUST begin with the character {{.
-Schema: {schema_line}"""
 
 SANCTION_RULES = (
     "\nYou may also sanction one cog per round: you pay {cost}, they lose {burn}."
@@ -200,10 +191,13 @@ class LlmDecider:
         module: Module,
         transport: object | None = _AUTO,  # type: ignore[assignment]
         model: str = "",
+        *,
+        prompt_selection: PromptSelection = CANONICAL_SELECTION,
     ) -> None:
         if transport is _AUTO:
             transport, model = build_transport()
         self.config = config
+        self.prompt_selection = prompt_selection
         self.module = module
         self.transport = transport
         self.model = model or DEFAULT_ANTHROPIC_MODEL
@@ -227,7 +221,9 @@ class LlmDecider:
                 cost=obs["sanction_cost"], burn=obs["sanction_burn"]
             )
         norm_line = f"\nPosted norm: {obs['norm_text']}" if obs["norm_text"] else ""
-        prompt = SYSTEM_TEMPLATE.format(
+        prompt = self.prompt_selection.introduction(
+            obs["alias"], obs["num_players"], obs["rounds"], obs["module"]
+        ) + SYSTEM_TEMPLATES[self.prompt_selection.selected].format(
             alias=obs["alias"],
             num_players=obs["num_players"],
             rounds=obs["rounds"],

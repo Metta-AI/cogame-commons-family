@@ -44,6 +44,7 @@ from coworld.examples.commons_family.game.engine import (
     truncate_runes,
 )
 from coworld.examples.commons_family.game.llm import LlmDecider
+from coworld.examples.commons_family.game.prompts import PromptSelection
 from coworld.examples.commons_family.shared.artifact_io import (
     artifact_method,
     read_data,
@@ -129,7 +130,7 @@ class GameSession:
         self.reason = ""
         self.round_seconds = CONFIG.round_seconds
         self.global_viewers = 0
-        self.decider = LlmDecider(CONFIG, MODULE)
+        self.decider = LlmDecider(CONFIG, MODULE, prompt_selection=PromptSelection.model_validate(RAW_CONFIG))
 
 
 session = GameSession()

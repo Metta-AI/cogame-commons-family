@@ -13,22 +13,19 @@ PYTHONPATH=src python tools/export_posttrain.py /tmp/commons-allelopathic 10 --v
 PYTHONPATH=src python tools/export_posttrain.py /tmp/commons-mushrooms 10 --variant mushrooms
 ```
 
-The exporter reads each certified `game_config` from
-`coworld_manifest_template.json`, runs ten complete games with the published
-steward player, and writes `train.jsonl`, `validation.jsonl`, and
-`manifest.json`. Seeds divisible by five go to validation, keeping each game
-entirely in one split. Every teacher reply passes the same parser and round
-settlement as hosted play. An existing output directory is rejected.
+The exporter reads each published configuration and completes every game with
+scripted steward proposals through the production parser and round settlement.
+It requires clean committed source and a new output directory. The original
+`train.jsonl`, `validation.jsonl`, and `manifest.json` format is preserved.
+Proposals changed by normalization are excluded; the manifest counts exclusions.
+These scripted targets are imitation data, not evidence of expert play.
 
-Train the text policy with Metta's post-training CLI:
-
-```bash
-uv run python -m metta_posttrain.train --dataset /tmp/commons-cleanup \
-  --output /tmp/commons-model --model Qwen/Qwen2.5-0.5B-Instruct \
-  --max-steps 100 --max-length 4096
-```
-
-The dataset imitates scripted play; its loss does not measure policy quality.
+Use `--prompt-variant canonical|plain|numbered|questions|reordered|mixed` and
+`--prompt-seed`. Mixed selection requires an explicit seed and cycles wording
+independently within each split and the requested game count. Held-out wording is rejected.
+Families exclude game variant and wording; seeds divisible by five enter
+validation, and all other seeds enter training. Preserve this assignment across
+modules and wordings.
 
 # Numeric reinforcement learning
 
@@ -51,3 +48,41 @@ state and ledger, own score, and own last gain. Their widths are 87 for Clean
 Up, 137 for Harvest, 91 for Allelopathic, and 92 for Mushrooms. Public chat,
 posted norms, and private notes remain available to the text post-training
 path; the numeric policy does not emit text.
+
+## Episode-stable prompt wording
+
+Hosted configurations accept `promptVariant` and `promptSeed`. Five training
+wordings are available: `canonical`, `plain`, `numbered`, `questions`, and
+`reordered`. `mixed` requires an explicit nonnegative prompt seed and selects
+training wording by `seed % 5`. Selection does not consume resource randomness
+or change identities, sanctions, module rules, action schemas, or standing orders.
+The canonical wording remains the default. Other variants rewrite simultaneous
+settlement, effort allocation, shared-resource effects, and payoff explanations.
+Module-specific rules and response schemas remain fixed. The shared score description
+now states accumulated module payoff, including mushroom externalities, minus
+sanctions; game scoring itself is unchanged.
+
+`heldout-briefing` and `heldout-reference` are evaluation-only. Freeze training
+choices before using these wordings. The language bridge rejects them under
+`split: train`; use `split: validation` or `split: test`.
+
+`PYTHONPATH=src:. python tools/text_bridge.py --variant cleanup` exposes production
+text decisions through the JSONL reset/teacher/step protocol. Reset requires
+`players: 6` and a scenario `seed`; it accepts the same prompt selector fields.
+Each round queues six normalized decisions against unchanged private views, then
+settles them together through the real engine. Notes stay private, chat becomes
+visible next round, and accepted directives describe normalized submissions,
+not guaranteed resource gains. The numeric bridge retains its existing actions
+and observation widths. The text bridge's steward teacher is scripted imitation,
+not an expert label or evidence of learned policy quality.
+
+Private semantic views expose the prompt bank, selected wording, seed, and hashes
+of the exact system and user messages. Keep all wordings and module variants of
+a scenario family in one data split. Compare base, canonical-trained, and
+mixed-trained checkpoints with identical scenario seeds, seats, partners,
+modules, and inference budgets. Report malformed replies, normalized proposals,
+fallbacks, incomplete games, per-seat scores, and welfare separately.
+
+Run `PYTHONPATH=src:. python -m pytest tests/test_prompt_games.py -q` for complete
+matched games across all six published variants, including private-note,
+next-round chat, normalized-sanction, and held-out training checks.
