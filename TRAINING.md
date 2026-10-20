@@ -22,7 +22,7 @@ These scripted targets are imitation data, not evidence of expert play.
 
 Use `--prompt-variant canonical|plain|numbered|questions|reordered|mixed` and
 `--prompt-seed`. Mixed selection requires an explicit seed and cycles wording
-within the requested game count. Held-out wording is rejected.
+independently within each split and the requested game count. Held-out wording is rejected.
 Families exclude game variant and wording; seeds divisible by five enter
 validation, and all other seeds enter training. Preserve this assignment across
 modules and wordings.

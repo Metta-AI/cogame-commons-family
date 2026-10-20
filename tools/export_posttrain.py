@@ -57,13 +57,16 @@ def main() -> None:
     train_rows: list[str] = []
     validation_rows: list[str] = []
     runs: list[dict] = []
+    wording_counts = [0, 0]
 
     for seed in range(args.first_seed, args.first_seed + args.games):
+        partition = int(seed % 5 == 0)
         selection = initial_selection
         if selection.variant == "mixed":
             selection = selection.model_copy(
-                update={"seed": selection.seed + seed - args.first_seed}
+                update={"seed": selection.seed + wording_counts[partition]}
             )
+            wording_counts[partition] += 1
         config = CommonsConfig.model_validate(variants[args.variant] | {"seed": seed})
         module = module_for(config)
         decider = LlmDecider(config, module, transport=None, prompt_selection=selection)
