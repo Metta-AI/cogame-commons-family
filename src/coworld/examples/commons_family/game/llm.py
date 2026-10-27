@@ -24,12 +24,12 @@ from coworld.examples.commons_family.game.engine import (
     truncate_runes,
 )
 from coworld.examples.commons_family.game.modules.base import Module
-from coworld.examples.commons_family.game.training_capture import TrainingCapture
 from coworld.examples.commons_family.game.prompts import (
     CANONICAL_SELECTION,
     SYSTEM_TEMPLATES,
     PromptSelection,
 )
+from coworld.examples.commons_family.game.training_capture import TrainingCapture
 from coworld.examples.commons_family.shared.log_shipper import get_logger
 
 logger = get_logger("commons_family.llm")
