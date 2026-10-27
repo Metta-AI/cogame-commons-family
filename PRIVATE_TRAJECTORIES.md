@@ -22,3 +22,10 @@ Local protocol fixtures do not establish hosted source authority or model qualit
 The headless whole-episode runner uses the same capture path. Runtime round-loop
 failures mark private episodes failed even when the historical public result
 contract settles already-played rounds.
+
+The engine records each model proposal through the real parser before settlement or
+player overrides. A changed supplied field (including a clamp) is conservatively
+rejected as a model label, while its parser output and original response remain
+available. Private fallback counts therefore also include parser normalization,
+without changing public gameplay. Failed protocol steps retain pending native
+attempts under the failed episode outcome rather than inventing applied decisions.

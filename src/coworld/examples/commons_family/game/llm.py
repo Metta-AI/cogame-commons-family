@@ -110,7 +110,7 @@ class MessagesTransport:
                 {"role": "system", "content": payload["system"]},
                 *payload["messages"],
             ],
-            "request": {"url": request.full_url, "body": request_bytes.decode("utf-8")},
+            "request": payload,
             "decoder": {"max_tokens": payload["max_tokens"]},
         }
         started = time.monotonic()
@@ -325,6 +325,7 @@ class LlmDecider:
         transport, disabled` otherwise. Nothing here blocks past `deadline`.
         """
         self.attempts = {}
+        self.capture.pending_attempts = self.attempts
         if isinstance(self.transport, MessagesTransport):
             self.transport.attempts = self.attempts
         if not requests:

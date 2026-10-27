@@ -71,64 +71,75 @@ def run_episode(
     scripted_slots = [slot for slot in range(config.num_agents) if slot not in prompts]
     fallbacks = {slot: make_baseline(config.fallback_scripted, seed=slot) for slot in prompts}
 
-    with ThreadPoolExecutor(max_workers=max(1, config.num_agents)) as executor:
-        for _ in range(config.rounds):
-            open_round(state, config, module)
-            observations = {
-                slot: observation(state, config, slot, module)
-                for slot in range(config.num_agents)
-            }
+    try:
+        with ThreadPoolExecutor(max_workers=max(1, config.num_agents)) as executor:
+            for _ in range(config.rounds):
+                open_round(state, config, module)
+                observations = {
+                    slot: observation(state, config, slot, module)
+                    for slot in range(config.num_agents)
+                }
 
-            def decide(slot: int) -> dict:
-                return policies[slot].act(observations[slot])
+                def decide(slot: int) -> dict:
+                    return policies[slot].act(observations[slot])
 
-            raw: dict[int, dict] = {}
-            src: dict[int, str] = {}
-            if decider is not None and hasattr(decider, "attempts"):
-                decider.attempts = {}
-            if parallel_seats:
-                for slot, reply in zip(scripted_slots, executor.map(decide, scripted_slots)):
-                    raw[slot] = reply
-                    src[slot] = f"scripted:{getattr(policies[slot], 'name', 'baseline')}"
-            else:
-                for slot in scripted_slots:
-                    raw[slot] = decide(slot)
-                    src[slot] = f"scripted:{getattr(policies[slot], 'name', 'baseline')}"
-
-            if prompts and decider is not None:
-                requests = {slot: (observations[slot], prompts[slot]) for slot in prompts}
-                answers = decider.decide(requests, time.monotonic() + config.round_seconds)
-                for slot, (reply, cause) in answers.items():
-                    if reply is not None:
+                raw: dict[int, dict] = {}
+                src: dict[int, str] = {}
+                if decider is not None and hasattr(decider, "attempts"):
+                    decider.attempts = {}
+                    if hasattr(decider, "capture"):
+                        decider.capture.pending_attempts = decider.attempts
+                if parallel_seats:
+                    for slot, reply in zip(scripted_slots, executor.map(decide, scripted_slots)):
                         raw[slot] = reply
-                        src[slot] = "llm"
-                        continue
-                    raw[slot] = fallbacks[slot].act(observations[slot])
-                    src[slot] = f"fallback:{cause}"
-                    state.fallbacks[slot] += 1
-                    state.events.append(
-                        {
-                            "kind": "fallback",
-                            "r": state.round,
-                            "slot": slot,
-                            "alias": state.aliases[slot],
-                            "cause": cause,
-                            "text": (
-                                f"{state.aliases[slot]} fell back to "
-                                f"{config.fallback_scripted} — {cause}"
-                            ),
-                        }
-                    )
+                        src[slot] = f"scripted:{getattr(policies[slot], 'name', 'baseline')}"
+                else:
+                    for slot in scripted_slots:
+                        raw[slot] = decide(slot)
+                        src[slot] = f"scripted:{getattr(policies[slot], 'name', 'baseline')}"
 
-            decisions = [
-                parse_decision(raw.get(slot, {}), slot, config, state, module, src.get(slot, "pass"))
-                for slot in range(config.num_agents)
-            ]
-            settle_round(state, decisions, config, module)
-            if decider is not None and hasattr(decider, "capture"):
-                decider.capture.record_round(
-                    observations, decisions, decider.attempts, set(range(config.num_agents))
-                )
+                if prompts and decider is not None:
+                    requests = {slot: (observations[slot], prompts[slot]) for slot in prompts}
+                    answers = decider.decide(requests, time.monotonic() + config.round_seconds)
+                    if hasattr(decider, "capture"):
+                        decider.capture.parse_model_replies(answers, config, state, module)
+                    for slot, (reply, cause) in answers.items():
+                        if reply is not None:
+                            raw[slot] = reply
+                            src[slot] = "llm"
+                            continue
+                        raw[slot] = fallbacks[slot].act(observations[slot])
+                        src[slot] = f"fallback:{cause}"
+                        state.fallbacks[slot] += 1
+                        state.events.append(
+                            {
+                                "kind": "fallback",
+                                "r": state.round,
+                                "slot": slot,
+                                "alias": state.aliases[slot],
+                                "cause": cause,
+                                "text": (
+                                    f"{state.aliases[slot]} fell back to "
+                                    f"{config.fallback_scripted} — {cause}"
+                                ),
+                            }
+                        )
+
+                decisions = [
+                    parse_decision(raw.get(slot, {}), slot, config, state, module, src.get(slot, "pass"))
+                    for slot in range(config.num_agents)
+                ]
+                settle_round(state, decisions, config, module)
+                if decider is not None and hasattr(decider, "capture"):
+                    decider.capture.record_round(
+                        observations, decisions, decider.attempts, set(range(config.num_agents))
+                    )
+    except Exception as error:
+        if decider is not None and hasattr(decider, "capture"):
+            decider.capture.failure = str(error)
+            decider.capture.finish(results(state, config, module, "deadline",
+                                           default_player_names(config.num_agents), decider.requests))
+        raise
 
     state.events.append(
         {

@@ -449,6 +449,7 @@ async def _run_episode() -> str:
         raw: dict[int, dict] = {}
         src: dict[int, str] = {}
         session.decider.attempts = {}
+        session.decider.capture.pending_attempts = session.decider.attempts
         prompt_requests: dict[int, tuple[dict, str]] = {}
         for slot in range(CONFIG.num_agents):
             if engine.disconnected[slot]:
@@ -466,6 +467,7 @@ async def _run_episode() -> str:
             )
         else:
             answers = {}
+        session.decider.capture.parse_model_replies(answers, CONFIG, engine, MODULE)
         for slot, (reply, cause) in answers.items():
             if reply is not None:
                 raw[slot] = reply
