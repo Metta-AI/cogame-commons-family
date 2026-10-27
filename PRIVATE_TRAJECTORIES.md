@@ -9,8 +9,13 @@ Missing identity pins fail visibly; they are never inferred from replay bytes.
 The engine retains exact native request bodies, prompts, response bytes, response
 headers, native `X-Softmax-Llm-Call-Id`, rejected attempts, and its normalized applied
 action. Scripted policies and engine fallbacks retain distinct origins. A player submission that overrides a model proposal rejects that proposal in
-the evidence; the selected action retains its actual origin. Physical seed families are
-`commons-family-SEED` across prompt and configuration variants. A deadline is truncated,
+the evidence; the selected action retains its actual origin. Physical families hash the actual initial module state and active resource/institution
+rules, without alias permutations, prompt wording, clocks, or unused deals. Open harvest
+ownership/pairs and neutral favorite assignments are excluded; consequential closed
+ownership, partnership pairs, and favorite roles remain. Cleanup and mushrooms therefore
+group replicas across seeds. The namespace is `commons-family-physical-v1-SHA256`.
+Historical `commons-family-SEED` artifacts are unchanged and may falsely split alias-only
+replicas; they require explicit review before any family-sensitive training export. A deadline is truncated,
 and only normal completion qualifies as a completed episode.
 
 File artifacts use exclusive creation and mode 0600. Use a new destination for

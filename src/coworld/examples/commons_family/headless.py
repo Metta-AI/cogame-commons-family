@@ -55,6 +55,8 @@ def run_episode(
         raise ValueError(f"expected {config.num_agents} policies, got {len(policies)}")
     module = module_for(config)
     state = new_game(config)
+    if decider is not None and hasattr(decider, "capture"):
+        decider.capture.bind_episode(config, state)
     prompts = prompts or {}
     state.events.append(
         {

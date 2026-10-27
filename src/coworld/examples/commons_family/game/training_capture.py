@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -15,9 +16,51 @@ from coworld.examples.commons_family.shared.artifact_io import (
     write_data,
 )
 
+_PHYSICAL_RULES = {
+    "cleanup": ("stock_capacity", "regrowth_rate", "collapse_threshold", "silt_rate", "clean_power"),
+    "harvest": ("patch_capacity", "patch_regrowth"),
+    "allelopathic": ("field_size", "ripen_base", "favorite_bonus", "favorite_base"),
+    "mushrooms": (
+        "mushroom_capacity",
+        "mushroom_color_cap",
+        "spawn_per_round",
+        "red_value",
+        "green_value",
+        "blue_value",
+    ),
+}
+
+
+def physical_family(config: Any, state: Any) -> str:
+    """Group actual physical state/rules, independent of alias and wording RNG."""
+    initial = copy.deepcopy(state.module_state)
+    if config.module == "harvest":
+        rights = initial["property_rights"]
+        if rights != "closed":
+            initial.pop("owner")
+        if rights != "partnership":
+            initial.pop("pairs")
+        if rights == "partnership":
+            initial["pairs"] = [sorted(pair) for pair in initial["pairs"]]
+        if rights not in {"closed", "partnership"}:
+            initial["property_rights"] = "open"
+    elif config.module == "allelopathic" and config.favorite_bonus == config.favorite_base:
+        initial.pop("favorites")
+    payload = {
+        "module": config.module,
+        "num_agents": config.num_agents,
+        "effort_budget": config.effort_budget,
+        "initial_state": initial,
+        "rules": {name: getattr(config, name) for name in _PHYSICAL_RULES[config.module]},
+        "sanctions": {"cost": config.sanction_cost, "burn": config.sanction_burn} if config.sanctions_enabled else None,
+    }
+    content = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return "commons-family-physical-v1-" + hashlib.sha256(content.encode("utf-8")).hexdigest()
+
 
 class TrainingCapture:
-    def __init__(self, seed: int) -> None:
+    def __init__(self) -> None:
+        self.seed_family: str | None = None
         self.failure: str | None = None
         self.pending_attempts: dict[int, list[dict]] = {}
         self.destination = os.environ.get("COGAME_SAVE_TRAJECTORY_URI", "")
@@ -38,7 +81,13 @@ class TrainingCapture:
             schema_version="1",
             game=os.environ.get("COWORLD_GAME_NAME", "commons-family"),
         )
-        self.seed_family = f"commons-family-{seed}"
+
+    def bind_episode(self, config: Any, state: Any) -> None:
+        if not self.destination:
+            return
+        if state.round != 0 or state.history or self.decisions:
+            raise ValueError("physical family must bind the actual initial episode state")
+        self.seed_family = physical_family(config, state)
 
     @staticmethod
     def action(decision: Any) -> dict:
@@ -134,6 +183,8 @@ class TrainingCapture:
     def finish(self, outcome: dict) -> None:
         if not self.destination:
             return
+        if self.seed_family is None:
+            raise ValueError("private trajectory requires the actual initial physical family")
         reason = outcome["reason"]
         if self.failure:
             outcome = dict(

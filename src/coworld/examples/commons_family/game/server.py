@@ -131,6 +131,7 @@ class GameSession:
         self.round_seconds = CONFIG.round_seconds
         self.global_viewers = 0
         self.decider = LlmDecider(CONFIG, MODULE, prompt_selection=PromptSelection.model_validate(RAW_CONFIG))
+        self.decider.capture.bind_episode(CONFIG, self.engine)
 
 
 session = GameSession()
