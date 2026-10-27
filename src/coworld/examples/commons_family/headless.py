@@ -84,6 +84,8 @@ def run_episode(
 
             raw: dict[int, dict] = {}
             src: dict[int, str] = {}
+            if decider is not None and hasattr(decider, "attempts"):
+                decider.attempts = {}
             if parallel_seats:
                 for slot, reply in zip(scripted_slots, executor.map(decide, scripted_slots)):
                     raw[slot] = reply
@@ -123,6 +125,10 @@ def run_episode(
                 for slot in range(config.num_agents)
             ]
             settle_round(state, decisions, config, module)
+            if decider is not None and hasattr(decider, "capture"):
+                decider.capture.record_round(
+                    observations, decisions, decider.attempts, set(range(config.num_agents))
+                )
 
     state.events.append(
         {
@@ -132,6 +138,10 @@ def run_episode(
             "text": f"Final — {state.round} rounds played.",
         }
     )
+    if decider is not None and hasattr(decider, "capture"):
+        decider.capture.finish(
+            results(state, config, module, "complete", default_player_names(config.num_agents), decider.requests)
+        )
     return state
 
 

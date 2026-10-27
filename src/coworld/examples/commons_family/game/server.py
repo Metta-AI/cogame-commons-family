@@ -338,7 +338,8 @@ async def _play_game() -> None:
     """
     try:
         reason = await _run_episode()
-    except Exception:  # noqa: BLE001 - degrade, never hang
+    except Exception as error:  # noqa: BLE001 - degrade, never hang
+        session.decider.capture.failure = str(error)
         logger.exception("the round loop failed; settling on the rounds already played")
         reason = "complete"
     await _finish(reason)
@@ -447,6 +448,7 @@ async def _run_episode() -> str:
 
         raw: dict[int, dict] = {}
         src: dict[int, str] = {}
+        session.decider.attempts = {}
         prompt_requests: dict[int, tuple[dict, str]] = {}
         for slot in range(CONFIG.num_agents):
             if engine.disconnected[slot]:
@@ -520,6 +522,9 @@ async def _run_episode() -> str:
             )
 
         settle_round(engine, decisions, CONFIG, MODULE)
+        session.decider.capture.record_round(
+            observations, decisions, session.decider.attempts, set(session.registrations)
+        )
 
     return reason
 
@@ -545,6 +550,7 @@ async def _finish(reason: str) -> None:
         engine, CONFIG, MODULE, reason, PLAYER_NAMES, session.decider.requests
     )
     logger.info("episode finished: reason=%s scores=%s", reason, payload["scores"])
+    await asyncio.to_thread(session.decider.capture.finish, payload)
 
     # Artifact writes are blocking HTTP; off the event loop so websocket pings
     # (the hosted certifier probes /global right around game end) still answer.

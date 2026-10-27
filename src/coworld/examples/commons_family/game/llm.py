@@ -7,6 +7,7 @@ The game owns parallel dispatch, retries, and its scripted fallback.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import threading
@@ -23,7 +24,12 @@ from coworld.examples.commons_family.game.engine import (
     truncate_runes,
 )
 from coworld.examples.commons_family.game.modules.base import Module
-from coworld.examples.commons_family.game.prompts import CANONICAL_SELECTION, SYSTEM_TEMPLATES, PromptSelection
+from coworld.examples.commons_family.game.training_capture import TrainingCapture
+from coworld.examples.commons_family.game.prompts import (
+    CANONICAL_SELECTION,
+    SYSTEM_TEMPLATES,
+    PromptSelection,
+)
 from coworld.examples.commons_family.shared.log_shipper import get_logger
 
 logger = get_logger("commons_family.llm")
@@ -35,13 +41,10 @@ DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 THROTTLE_SLEEPS = (0.5, 1.0, 2.0)
 
 RETRY_HINT = (
-    "Your last reply was not usable. Reply with ONE JSON object beginning with { "
-    "and only the fields in the schema."
+    "Your last reply was not usable. Reply with ONE JSON object beginning with { and only the fields in the schema."
 )
 
-SANCTION_RULES = (
-    "\nYou may also sanction one cog per round: you pay {cost}, they lose {burn}."
-)
+SANCTION_RULES = "\nYou may also sanction one cog per round: you pay {cost}, they lose {burn}."
 
 
 class LlmThrottled(Exception):
@@ -75,6 +78,8 @@ class MessagesTransport:
         self.model = model
         self.api_key = api_key
         self.base = base.rstrip("/")
+        self.attempts: dict[int, list[dict]] = {}
+        self.capture_enabled = bool(os.environ.get("COGAME_SAVE_TRAJECTORY_URI"))
 
     def complete(self, body: dict, timeout: float, slot: int) -> str:
         payload = {
@@ -83,9 +88,10 @@ class MessagesTransport:
             "system": body["system"],
             "messages": body["messages"],
         }
+        request_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         request = Request(
             f"{self.base}/v1/messages",
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            data=request_bytes,
             headers={
                 "content-type": "application/json",
                 "anthropic-version": "2023-06-01",
@@ -94,20 +100,83 @@ class MessagesTransport:
                 "X-Coworld-Player-Slot": str(slot),
             },
         )
+        evidence: dict[str, Any] = {
+            "attempt_id": f"{slot}-{len(self.attempts.get(slot, []))}",
+            "policy": "registered-prompt",
+            "origin": "model",
+            "accepted": False,
+            "model": self.model,
+            "prompt": [
+                {"role": "system", "content": payload["system"]},
+                *payload["messages"],
+            ],
+            "request": {"url": request.full_url, "body": request_bytes.decode("utf-8")},
+            "decoder": {"max_tokens": payload["max_tokens"]},
+        }
+        started = time.monotonic()
+
+        def received(response: Any) -> bytes:
+            chunks: list[bytes] = []
+            evidence["response_complete"] = False
+            evidence["http_status"] = response.status
+            evidence["response_headers"] = dict(response.headers.items())
+            call_id = response.headers.get("X-Softmax-Llm-Call-Id")
+            if call_id:
+                evidence["platform_call_id"] = call_id
+            request_id = response.headers.get("request-id") or response.headers.get("x-request-id")
+            if request_id:
+                evidence["provider_request_id"] = request_id
+            try:
+                reader = getattr(response, "read1", response.read)
+                while chunk := reader(65536):
+                    chunks.append(chunk)
+                evidence["response_complete"] = True
+            finally:
+                data = b"".join(chunks)
+                evidence["response_body_b64"] = base64.b64encode(data).decode("ascii")
+                try:
+                    evidence["raw_response"] = data.decode("utf-8")
+                except UnicodeDecodeError:
+                    pass  # Original bytes remain in response_body_b64.
+            return data
+
         try:
             with urlopen(request, timeout=timeout) as response:
-                content = json.load(response)["content"]
-                return next((block["text"] for block in content if block["type"] == "text"), "")
+                result = json.loads(received(response))
+                evidence["provider_response"] = result
+                if result.get("model"):
+                    evidence["model"] = result["model"]
+                if result.get("id"):
+                    evidence["generation_id"] = result["id"]
+                if result.get("stop_reason"):
+                    evidence["stop_reason"] = result["stop_reason"]
+                for name in ("input_tokens", "output_tokens"):
+                    if name in result.get("usage", {}):
+                        evidence[name] = result["usage"][name]
+                text = next(
+                    (block["text"] for block in result["content"] if block["type"] == "text"),
+                    "",
+                )
+                evidence["response"] = text
+                return text
         except HTTPError as error:
+            evidence["rejection_reason"] = f"HTTP {error.code}"
+            received(error)
             if error.code in (429, 529):
                 raise LlmThrottled(str(error.code)) from error
             raise
         except TimeoutError as error:
+            evidence["rejection_reason"] = "timeout"
             raise LlmTimeout(str(error)) from error
         except URLError as error:
+            evidence["rejection_reason"] = str(error)
             if isinstance(error.reason, TimeoutError):
                 raise LlmTimeout(str(error)) from error
             raise LlmTransportError(str(error)) from error
+        finally:
+            evidence["latency_ms"] = (time.monotonic() - started) * 1000
+            if self.capture_enabled:
+                self.attempts.setdefault(slot, []).append(evidence)
 
 
 def build_transport() -> tuple[object | None, str]:
@@ -131,7 +200,11 @@ def build_transport() -> tuple[object | None, str]:
                 key = ""
     if key:
         model = os.environ.get("COMMONS_FAMILY_MODEL", DEFAULT_ANTHROPIC_MODEL)
-        return MessagesTransport(model, key, os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com")), model
+        return MessagesTransport(
+            model,
+            key,
+            os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com"),
+        ), model
     return None, ""
 
 
@@ -189,17 +262,19 @@ class LlmDecider:
         self,
         config: CommonsConfig,
         module: Module,
-        transport: object | None = _AUTO,  # type: ignore[assignment]
+        transport: Any = _AUTO,
         model: str = "",
         *,
         prompt_selection: PromptSelection = CANONICAL_SELECTION,
     ) -> None:
         if transport is _AUTO:
             transport, model = build_transport()
+        self.capture = TrainingCapture(config.seed)
+        self.attempts: dict[int, list[dict]] = {}
         self.config = config
         self.prompt_selection = prompt_selection
         self.module = module
-        self.transport = transport
+        self.transport: Any = transport
         self.model = model or DEFAULT_ANTHROPIC_MODEL
         self.requests = 0
         self._systems: dict[int, str] = {}
@@ -217,9 +292,7 @@ class LlmDecider:
     def system_prompt(self, obs: dict, standing_orders: str) -> str:
         sanction_rules = ""
         if obs["sanctions_enabled"]:
-            sanction_rules = SANCTION_RULES.format(
-                cost=obs["sanction_cost"], burn=obs["sanction_burn"]
-            )
+            sanction_rules = SANCTION_RULES.format(cost=obs["sanction_cost"], burn=obs["sanction_burn"])
         norm_line = f"\nPosted norm: {obs['norm_text']}" if obs["norm_text"] else ""
         prompt = self.prompt_selection.introduction(
             obs["alias"], obs["num_players"], obs["rounds"], obs["module"]
@@ -245,14 +318,15 @@ class LlmDecider:
 
     # -- the batch ---------------------------------------------------------
 
-    def decide(
-        self, requests: dict[int, tuple[dict, str]], deadline: float
-    ) -> dict[int, tuple[dict | None, str]]:
+    def decide(self, requests: dict[int, tuple[dict, str]], deadline: float) -> dict[int, tuple[dict | None, str]]:
         """One parallel batch. Returns `{slot: (reply | None, cause)}`.
 
         `cause` is empty on success and one of `timeout, parse, rate_budget,
         transport, disabled` otherwise. Nothing here blocks past `deadline`.
         """
+        self.attempts = {}
+        if isinstance(self.transport, MessagesTransport):
+            self.transport.attempts = self.attempts
         if not requests:
             return {}
         if not self.enabled:
@@ -261,14 +335,13 @@ class LlmDecider:
         with ThreadPoolExecutor(max_workers=max(1, len(slots))) as executor:
             answers = list(
                 executor.map(
-                    lambda slot: self._decide_seat(slot, *requests[slot], deadline), slots
+                    lambda slot: self._decide_seat(slot, *requests[slot], deadline),
+                    slots,
                 )
             )
         return dict(zip(slots, answers))
 
-    def _decide_seat(
-        self, slot: int, obs: dict, standing_orders: str, deadline: float
-    ) -> tuple[dict | None, str]:
+    def _decide_seat(self, slot: int, obs: dict, standing_orders: str, deadline: float) -> tuple[dict | None, str]:
         if slot not in self._systems:
             self._systems[slot] = self.system_prompt(obs, standing_orders)
         system = self._systems[slot]
@@ -306,9 +379,13 @@ class LlmDecider:
                 continue
             parsed = extract_json(raw)
             if parsed is None:
+                if self.attempts.get(slot):
+                    self.attempts[slot][-1]["rejection_reason"] = "no JSON object"
                 logger.warning("slot %d unusable reply: %r", slot, raw[:200])
                 cause = "parse"
                 continue
+            if self.attempts.get(slot):
+                self.attempts[slot][-1]["_proposal"] = parsed
             return parsed, ""
         return None, cause
 
