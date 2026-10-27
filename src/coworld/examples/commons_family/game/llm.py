@@ -269,7 +269,7 @@ class LlmDecider:
     ) -> None:
         if transport is _AUTO:
             transport, model = build_transport()
-        self.capture = TrainingCapture(config.seed)
+        self.capture = TrainingCapture()
         self.attempts: dict[int, list[dict]] = {}
         self.config = config
         self.prompt_selection = prompt_selection
