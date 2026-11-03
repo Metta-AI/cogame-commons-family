@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 TRAINING_VARIANTS = ("canonical", "plain", "numbered", "questions", "reordered")
 HELDOUT_VARIANTS = ("heldout-briefing", "heldout-reference")
-BANK_VERSION = "commons-family-rules-v2"
+BANK_VERSION = "commons-family-rules-v3"
 
 
 class PromptSelection(BaseModel):

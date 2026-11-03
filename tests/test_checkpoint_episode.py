@@ -32,14 +32,25 @@ TEACHER = "anthropic/claude-haiku-4.5"
 CHECKPOINT = "checkpoint/" + "a" * 64
 
 
-@pytest.mark.parametrize("checkpoint_seat", [False, True, "wrong-identity"])
+@pytest.mark.parametrize(
+    ("checkpoint_seat", "text_limits"),
+    [
+        pytest.param(False, None, id="teacher"),
+        pytest.param(True, None, id="checkpoint"),
+        pytest.param("wrong-identity", None, id="wrong-identity"),
+        pytest.param(False, {"chat_enabled": True, "chat_max_chars": 7}, id="teacher-text-limits"),
+        pytest.param(True, {"chat_enabled": False}, id="checkpoint-text-limits"),
+    ],
+)
 def test_ordinary_native_checkpoint_seat_keeps_teacher_scaffold(
-    tmp_path, checkpoint_seat
+    tmp_path, checkpoint_seat, text_limits
 ):
     manifest = json.loads((ROOT / "coworld_manifest_template.json").read_text())
     values = dict(
         next(v["game_config"] for v in manifest["variants"] if v["id"] == "cleanup")
     )
+    if text_limits is not None:
+        values.update(text_limits)
     values["tokens"] = [str(uuid4()) for _ in range(6)]
     config = CommonsConfig.model_validate(values)
     assert (config.rounds, config.round_seconds, config.min_round_seconds) == (
@@ -63,6 +74,11 @@ def test_ordinary_native_checkpoint_seat_keeps_teacher_scaffold(
             slot = int(self.headers["X-Coworld-Player-Slot"])
             view = json.JSONDecoder().raw_decode(body["messages"][0]["content"])[0]
             proposal = teachers[slot].act(view)
+            if text_limits is not None:
+                proposal["note"] = "🧭" * 200
+                proposal.pop("message", None)
+                if config.chat_enabled:
+                    proposal["message"] = "🍏" * config.chat_max_chars
             # Synthetic provider response, never an authenticated platform receipt.
             text = json.dumps(proposal)[1:]
             call_id = str(uuid4())
@@ -229,6 +245,21 @@ def test_ordinary_native_checkpoint_seat_keeps_teacher_scaffold(
                     body = call["body"]
                     expected = CHECKPOINT if checkpoint_seat and slot == 1 else TEACHER
                     assert body["model"] == expected and body["max_tokens"] == 300
+                    if text_limits is not None:
+                        assert '"note" is private and must contain at most 200 Unicode characters' in body["system"]
+                        if config.chat_enabled:
+                            assert f'"message" is public and must contain at most {config.chat_max_chars} Unicode characters' in body["system"]
+                        else:
+                            assert 'Omit "message" because public chat is disabled' in body["system"]
+                        proposal = json.loads("{" + call["response"])
+                        assert len(proposal["note"]) == 200
+                        assert len(proposal["note"].encode()) > 200
+                        assert decision["executed_action"]["note"] == proposal["note"]
+                        if config.chat_enabled:
+                            assert len(proposal["message"]) == config.chat_max_chars
+                            assert decision["executed_action"]["message"] == proposal["message"]
+                        else:
+                            assert "message" not in proposal
                     assert "checkpoint_model" not in body
                     assert body["messages"][-1] == {"role": "assistant", "content": "{"}
                     assert selected["prompt"] == [
