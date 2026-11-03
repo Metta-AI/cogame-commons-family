@@ -23,9 +23,27 @@ These scripted targets are imitation data, not evidence of expert play.
 Use `--prompt-variant canonical|plain|numbered|questions|reordered|mixed` and
 `--prompt-seed`. Mixed selection requires an explicit seed and cycles wording
 independently within each split and the requested game count. Held-out wording is rejected.
-Families exclude game variant and wording; seeds divisible by five enter
-validation, and all other seeds enter training. Preserve this assignment across
-modules and wordings.
+The exporter uses the native capture's actual initial physical family: resource
+state and rules, consequential ownership/preferences, effort and sanctions.
+Aliases and wording cannot create independent families. The first 32 bits of
+SHA-256 of the family select validation below 20%, otherwise training. Every
+replica and wording of that family stays together. This matches the shared
+posttraining dataset's deterministic family assignment.
+
+The row's `seed` now records this physical family; each manifest run retains its
+original integer RNG seed and adds `seed_family` and `split`. The manifest also
+records `split_scheme`, `seed_family_splits`, actual populated `physical_families`
+and `independent_split_coverage`. Existing filenames and core fields remain.
+An empty split is a zero-byte JSONL file. Clean Up, open Harvest and Mushrooms
+retain one physical family when only their seed changes: ten seeded replicas
+therefore cannot fill both splits. Combine independently qualified physical
+conditions before claiming independent evaluation. Presence in both files does
+not establish teacher strength or admission of these scripted proposals.
+
+Historical exports retain their original source pins and seed-based assignments;
+they are not rewritten. Reproduce them with those versions, and audit physical
+overlap before considering them for evaluation. No game mechanics or native
+capture behavior changes with this exporter correction.
 
 # Numeric reinforcement learning
 
