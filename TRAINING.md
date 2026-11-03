@@ -20,6 +20,15 @@ It requires clean committed source and a new output directory. The original
 Proposals changed by normalization are excluded; the manifest counts exclusions.
 These scripted targets are imitation data, not evidence of expert play.
 
+The native teacher, checkpoint player and exporter all use the same system-prompt
+builder. Rules bank `commons-family-rules-v3` states the existing 200-character
+private-note limit and the episode's configured public-message limit; when chat
+is disabled it asks the player to omit `message`. Counts are Unicode characters,
+not UTF-8 bytes. The engine still normalizes over-limit proposals and the exporter
+still excludes changed targets. Historical v2 captures keep their source, prompt
+hashes and exclusions; this wording update does not establish model compliance
+or teacher strength.
+
 Use `--prompt-variant canonical|plain|numbered|questions|reordered|mixed` and
 `--prompt-seed`. Mixed selection requires an explicit seed and cycles wording
 independently within each split and the requested game count. Held-out wording is rejected.

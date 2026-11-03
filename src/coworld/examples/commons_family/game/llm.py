@@ -19,6 +19,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from coworld.examples.commons_family.game.engine import (
+    NOTE_MAX_CHARS,
     PROMPT_MAX_RUNES,
     CommonsConfig,
     truncate_runes,
@@ -331,6 +332,16 @@ class LlmDecider:
             norm_line=norm_line,
             schema_line=self.module.schema_line(self.config),
         )
+        prompt += (
+            f'\nThe optional "note" is private and must contain at most {NOTE_MAX_CHARS} Unicode characters.'
+        )
+        if obs["chat_enabled"]:
+            prompt += (
+                f' The optional "message" is public and must contain at most {obs["chat_max_chars"]} Unicode characters.'
+            )
+        else:
+            prompt += ' Omit "message" because public chat is disabled.'
+        prompt += " These limits count characters, not UTF-8 bytes."
         orders = truncate_runes(standing_orders, PROMPT_MAX_RUNES)
         if orders:
             prompt += f"\n\nSTANDING ORDERS\n{orders}"
