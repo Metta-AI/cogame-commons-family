@@ -30,6 +30,7 @@ from coworld.examples.commons_family.game.prompts import (
     PromptSelection,
 )
 from coworld.examples.commons_family.game.training_capture import TrainingCapture
+from coworld.examples.commons_family.shared.checkpoint import checkpoint_model
 from coworld.examples.commons_family.shared.log_shipper import get_logger
 
 logger = get_logger("commons_family.llm")
@@ -88,6 +89,11 @@ class MessagesTransport:
             "system": body["system"],
             "messages": body["messages"],
         }
+        if "checkpoint_model" in body:
+            payload["model"] = checkpoint_model(body["checkpoint_model"])
+            payload["thinking"] = {"type": "disabled"}
+            payload["temperature"] = 0
+            payload["top_p"] = 1
         request_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         request = Request(
             f"{self.base}/v1/messages",
@@ -111,7 +117,9 @@ class MessagesTransport:
                 *payload["messages"],
             ],
             "request": payload,
-            "decoder": {"max_tokens": payload["max_tokens"]},
+            "decoder": {
+                key: payload[key] for key in ("max_tokens", "thinking", "temperature", "top_p") if key in payload
+            },
         }
         started = time.monotonic()
 
@@ -126,6 +134,13 @@ class MessagesTransport:
             request_id = response.headers.get("request-id") or response.headers.get("x-request-id")
             if request_id:
                 evidence["provider_request_id"] = request_id
+            for header, field in (
+                ("X-Coworld-Checkpoint-Sha256", "model_identity"),
+                ("X-Coworld-Tokenizer-Sha256", "tokenizer_identity"),
+                ("X-Coworld-Chat-Template-Sha256", "chat_template_identity"),
+            ):
+                if value := response.headers.get(header):
+                    evidence[field] = value
             try:
                 reader = getattr(response, "read1", response.read)
                 while chunk := reader(65536):
@@ -158,6 +173,14 @@ class MessagesTransport:
                     "",
                 )
                 evidence["response"] = text
+                if "checkpoint_model" in body and (
+                    evidence.get("model_identity") != payload["model"].removeprefix("checkpoint/")
+                    or not evidence.get("tokenizer_identity")
+                    or not evidence.get("chat_template_identity")
+                    or result.get("model") != payload["model"]
+                ):
+                    evidence["rejection_reason"] = "checkpoint serving identity mismatch"
+                    raise LlmTransportError("checkpoint serving identity mismatch")
                 return text
         except HTTPError as error:
             evidence["rejection_reason"] = f"HTTP {error.code}"
@@ -190,7 +213,7 @@ def build_transport() -> tuple[object | None, str]:
         uri = os.environ.get("ANTHROPIC_API_KEY_URI")
         if uri:
             try:
-                from coworld.examples.commons_family.shared.artifact_io import (  # noqa: PLC0415
+                from coworld.examples.commons_family.shared.artifact_io import (
                     read_data,
                 )
 
@@ -280,6 +303,7 @@ class LlmDecider:
         self._systems: dict[int, str] = {}
         self._budget: deque[float] = deque()
         self._lock = threading.Lock()
+        self.checkpoint_models: dict[int, str] = {}
         if self.transport is None:
             logger.info("no LLM credentials: every prompt seat plays the scripted fallback")
 
@@ -318,12 +342,23 @@ class LlmDecider:
 
     # -- the batch ---------------------------------------------------------
 
-    def decide(self, requests: dict[int, tuple[dict, str]], deadline: float) -> dict[int, tuple[dict | None, str]]:
+    def decide(
+        self,
+        requests: dict[int, tuple[dict, str]],
+        deadline: float,
+        *,
+        checkpoint_models: dict[int, str] | None = None,
+    ) -> dict[int, tuple[dict | None, str]]:
         """One parallel batch. Returns `{slot: (reply | None, cause)}`.
 
         `cause` is empty on success and one of `timeout, parse, rate_budget,
         transport, disabled` otherwise. Nothing here blocks past `deadline`.
         """
+        self.checkpoint_models = {
+            slot: checkpoint_model(model) for slot, model in (checkpoint_models or {}).items()
+        }
+        if self.checkpoint_models.keys() - requests.keys():
+            raise ValueError("Checkpoint routes require a participating prompt seat")
         self.attempts = {}
         self.capture.pending_attempts = self.attempts
         if isinstance(self.transport, MessagesTransport):
@@ -364,7 +399,7 @@ class LlmDecider:
                 logger.warning("slot %d transport error: %s", slot, error)
                 cause = "transport"
                 continue
-            except Exception:  # noqa: BLE001 - an unclassified failure degrades ONE seat
+            except Exception:
                 # A rejected credential (HTTP 401/403, a botocore auth or
                 # validation ClientError) or a response shape the parser does
                 # not expect is still a transport failure from the seat's point
@@ -403,6 +438,10 @@ class LlmDecider:
             "system": system,
             "messages": messages,
         }
+        if model := self.checkpoint_models.get(slot):
+            # Route only inference. Keep the game's teacher scaffold, including
+            # its assistant prefill and token ceiling, identical for the student.
+            body["checkpoint_model"] = model
         if not prefill:
             body["output_config"] = {"effort": "low"}
 

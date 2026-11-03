@@ -22,6 +22,7 @@ from typing import Any, cast
 
 import websockets
 
+from coworld.examples.commons_family.shared.checkpoint import checkpoint_model
 from coworld.examples.commons_family.shared.log_shipper import get_logger
 
 logger = get_logger("commons_family.player")
@@ -51,7 +52,13 @@ PING_TIMEOUT_SECONDS = 30.0
 def registration() -> dict[str, str]:
     prompt = (os.environ.get("PLAYER_PROMPT") or "").strip()[:PROMPT_MAX_RUNES]
     scripted = (os.environ.get("PLAYER_SCRIPTED") or "").strip()[:SCRIPTED_MAX_RUNES]
-    return {"type": "prompt", "prompt": prompt, "scripted": scripted}
+    frame = {"type": "prompt", "prompt": prompt, "scripted": scripted}
+    model = os.environ.get("COWORLD_LLM_MODEL", "")
+    if model.startswith("checkpoint/") and not scripted:
+        if not prompt:
+            raise ValueError("Checkpoint players require PLAYER_PROMPT standing orders")
+        frame["checkpoint_model"] = checkpoint_model(model)
+    return frame
 
 
 async def connect_with_retry(url: str, timeout: float = CONNECT_TIMEOUT_SECONDS):
@@ -71,7 +78,7 @@ async def connect_with_retry(url: str, timeout: float = CONNECT_TIMEOUT_SECONDS)
                 ping_interval=PING_INTERVAL_SECONDS,
                 ping_timeout=PING_TIMEOUT_SECONDS,
             )
-        except Exception as error:  # noqa: BLE001 - any startup race is retryable
+        except Exception as error:
             if time.monotonic() >= deadline:
                 logger.info(
                     "could not reach the game after %d attempts: %s", attempt, error
@@ -97,6 +104,10 @@ async def main() -> None:
         logger.info("giving up on the game socket (%s), exiting", error)
         return
     try:
+        if "checkpoint_model" in frame:
+            welcome = json.loads(await asyncio.wait_for(websocket.recv(), timeout=5))
+            if welcome.get("type") != "welcome" or welcome.get("checkpoint_routing") != "immutable-sha256":
+                raise ValueError("Game does not advertise immutable checkpoint routing; use a compatible game version")
         await websocket.send(json.dumps(frame, ensure_ascii=False))
         logger.info("registered; receiving rounds until the game says final")
         deadline = time.monotonic() + SPECTATE_TIMEOUT_SECONDS
@@ -110,7 +121,7 @@ async def main() -> None:
             if message.get("type") == "final":
                 logger.info("received final message, exiting")
                 return
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.info("no frame from the game inside the spectate window, exiting")
     except websockets.exceptions.ConnectionClosed:
         # The server exiting after the last round is the episode-over signal for

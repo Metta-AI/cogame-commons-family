@@ -104,3 +104,50 @@ fallbacks, incomplete games, per-seat scores, and welfare separately.
 Run `PYTHONPATH=src:. python -m pytest tests/test_prompt_games.py -q` for complete
 matched games across all six published variants, including private-note,
 next-round chat, normalized-sanction, and held-out training checks.
+
+## Registered checkpoint seats
+
+A prompt player can opt into an existing platform-owned checkpoint route by
+setting `COWORLD_LLM_MODEL=checkpoint/<64-character lowercase weight SHA256>`
+alongside the same `PLAYER_PROMPT` used for its teacher. `PLAYER_SCRIPTED` still
+wins. The player requires the game's `immutable-sha256` routing capability before
+it registers; an older game cannot silently substitute its default teacher.
+This needs a compatible game release; the existing canonical 0.1.7 image does
+not gain the capability merely because a policy sets the variable.
+
+Only that seat's native inference destination changes. The game retains its
+ordinary teacher scaffold, including system/user messages, episode wording,
+standing orders, assistant prefill, parser and output-token ceiling. In the
+normal Haiku scaffold this is a supplied `{` and 300 output tokens. The
+checkpoint route is explicitly nonthinking and greedy (`temperature=0`,
+`top_p=1`); ordinary teacher requests keep their existing decoder settings.
+All prompt seats still dispatch in the same parallel round batch. Checkpoint
+routes freeze with the seat's first resolved policy, like its standing orders.
+
+The transport requires the returned weight identity and model alias to match
+the requested checkpoint, and retains tokenizer/template identities plus exact
+request, response bytes and decoder controls in private capture. Identity
+mismatch falls back with rejected attempts, not accepted student evidence.
+The model route does not enter player observations or native prompt text.
+
+Use receipt-bound native assistant-continuation preparation for this scaffold,
+masking the supplied prefix and training only the original generated suffix.
+Do not restore the brace into a training target or project a normalized action
+back onto an original model response. Base and trained evaluation must share
+standing orders, wording, native scaffold and decoder. Registration of the
+trusted route, verified model/tokenizer/template artifacts, actual sampler
+boundaries and ordinary hosted evaluation remain separate requirements; a game
+registration frame does not authorize a route, credentials, spend or deployment.
+
+`PYTHONPATH=src python -m pytest tests/test_checkpoint_episode.py -q` exercises
+real local HTTP and authenticated game WebSockets with the shipped player
+processes and complete 20-round games, retaining ordinary 20-second rounds and
+three-second pacing. Responses, model identities and call IDs are fixtures:
+these checks do not establish real Qwen inference, production routing, model
+throughput, authenticated teacher labels or learned strength. No game rules,
+horizons, module physics or historical exports change.
+
+No completion token IDs or behavior log probabilities are synthesized by this
+route. On-policy optimization still requires independently qualified real
+sampler evidence; private response capture and an attested model alone establish
+neither likelihoods nor reinforcement-learning eligibility.
