@@ -10,9 +10,10 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Barrier, Thread
+from urllib.error import URLError
+from urllib.request import urlopen
 from uuid import uuid4
 
-import httpx
 import pytest
 
 from coworld.examples.commons_family.game.baselines import make_baseline
@@ -136,19 +137,16 @@ def test_ordinary_native_checkpoint_seat_keeps_teacher_scaffold(
         )
         processes.append(server)
         deadline = time.monotonic() + 15
-        with httpx.Client(timeout=1) as client:
-            while True:
-                assert server.poll() is None, (tmp_path / "server.log").read_text()
-                try:
-                    if (
-                        client.get(f"http://127.0.0.1:{port}/healthz").status_code
-                        == 200
-                    ):
+        while True:
+            assert server.poll() is None, (tmp_path / "server.log").read_text()
+            try:
+                with urlopen(f"http://127.0.0.1:{port}/healthz", timeout=1) as response:
+                    if response.status == 200:
                         break
-                except httpx.TransportError:
-                    pass
-                assert time.monotonic() < deadline
-                time.sleep(0.05)
+            except (URLError, TimeoutError):
+                pass
+            assert time.monotonic() < deadline
+            time.sleep(0.05)
         for slot in range(6):
             player_env = {
                 **env,
