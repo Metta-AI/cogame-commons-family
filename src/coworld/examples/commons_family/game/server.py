@@ -50,6 +50,7 @@ from coworld.examples.commons_family.shared.artifact_io import (
     read_data,
     write_data,
 )
+from coworld.examples.commons_family.shared.checkpoint import checkpoint_model
 from coworld.examples.commons_family.shared.log_shipper import get_logger
 
 CLIENT_DIR = Path(__file__).parent / "client"
@@ -252,6 +253,7 @@ async def player(websocket: WebSocket) -> None:
             "module": CONFIG.module,
             "rounds": CONFIG.rounds,
             "num_players": CONFIG.num_agents,
+            "checkpoint_routing": "immutable-sha256",
         }
     )
     if len(session.players) == len(TOKENS) and not session.started:
@@ -265,10 +267,15 @@ async def player(websocket: WebSocket) -> None:
                 continue
             kind = message.get("type")
             if kind == "prompt":
-                session.registrations[slot] = {
+                registration = {
                     "prompt": truncate_runes(message.get("prompt"), PROMPT_MAX_RUNES),
                     "scripted": truncate_runes(message.get("scripted"), 32),
                 }
+                if "checkpoint_model" in message and not registration["scripted"]:
+                    if not registration["prompt"]:
+                        raise ValueError("Checkpoint players require prompt standing orders")
+                    registration["checkpoint_model"] = checkpoint_model(message["checkpoint_model"])
+                session.registrations[slot] = registration
                 logger.info(
                     "slot %d registered: %s",
                     slot,
@@ -306,7 +313,7 @@ def _policy_for(slot: int):
     if scripted:
         policy = ("scripted", make_baseline(scripted, seed=CONFIG.seed * 1000 + slot), scripted)
     elif registration.get("prompt"):
-        policy = ("prompt", registration["prompt"], "")
+        policy = ("prompt", registration["prompt"], registration.get("checkpoint_model", ""))
     else:
         policy = (
             "scripted",
@@ -339,7 +346,7 @@ async def _play_game() -> None:
     """
     try:
         reason = await _run_episode()
-    except Exception as error:  # noqa: BLE001 - degrade, never hang
+    except Exception as error:
         session.decider.capture.failure = str(error)
         logger.exception("the round loop failed; settling on the rounds already played")
         reason = "complete"
@@ -452,6 +459,7 @@ async def _run_episode() -> str:
         session.decider.attempts = {}
         session.decider.capture.pending_attempts = session.decider.attempts
         prompt_requests: dict[int, tuple[dict, str]] = {}
+        checkpoint_models: dict[int, str] = {}
         for slot in range(CONFIG.num_agents):
             if engine.disconnected[slot]:
                 continue
@@ -461,10 +469,15 @@ async def _run_episode() -> str:
                 src[slot] = f"scripted:{label}"
             else:
                 prompt_requests[slot] = (observations[slot], payload)
+                if label:
+                    checkpoint_models[slot] = label
 
         if prompt_requests:
             answers = await asyncio.to_thread(
-                session.decider.decide, prompt_requests, round_deadline
+                session.decider.decide,
+                prompt_requests,
+                round_deadline,
+                checkpoint_models=checkpoint_models,
             )
         else:
             answers = {}

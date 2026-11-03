@@ -21,6 +21,20 @@ An unknown name, a malformed frame, or no registration within 5 s of connect is 
 The reference player (`/bin/commons-family-player`) sends `PLAYER_PROMPT` and `PLAYER_SCRIPTED`
 from its environment and then spectates.
 
+A prompt policy may additionally send `checkpoint_model` as
+`checkpoint/<64-character lowercase weight SHA256>`. The shipped player sends
+this when `COWORLD_LLM_MODEL` names a checkpoint and `PLAYER_PROMPT` is nonempty;
+scripted registration retains precedence. Only platform-registered routes are
+usable. This selects that seat's inference model while preserving the game's
+native teacher prompt/prefill and output limit. Checkpoint sampling is explicitly
+nonthinking and greedy. Routes and immutable identities stay in private inference
+records, not player observations. All prompt seats remain one parallel batch.
+
+Supporting games add `"checkpoint_routing":"immutable-sha256"` to `welcome`.
+A checkpoint player reads this capability before registering and fails on old
+games or malformed checkpoint identities. Ordinary registrations remain unchanged.
+The protocol frame creates no serving route and changes no budget or authority.
+
 ## game → player
 
 **On connect:**
