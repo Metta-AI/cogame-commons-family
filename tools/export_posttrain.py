@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -24,6 +25,7 @@ from coworld.examples.commons_family.game.prompts import (
     HELDOUT_VARIANTS,
     PromptSelection,
 )
+from coworld.examples.commons_family.game.training_capture import physical_family
 
 OPERATOR_PROMPT = "Keep the shared resource alive while maximizing your own score."
 
@@ -58,19 +60,25 @@ def main() -> None:
     validation_rows: list[str] = []
     runs: list[dict] = []
     wording_counts = [0, 0]
+    families = {"train": set(), "validation": set()}
+    family_splits = {}
 
     for seed in range(args.first_seed, args.first_seed + args.games):
-        partition = int(seed % 5 == 0)
+        config = CommonsConfig.model_validate(variants[args.variant] | {"seed": seed})
+        module = module_for(config)
+        state = new_game(config)
+        family = physical_family(config, state)
+        fraction = int(hashlib.sha256(family.encode()).hexdigest()[:8], 16) / 2**32
+        split = "validation" if fraction < 0.2 else "train"
+        partition = int(split == "validation")
+        family_splits[family] = split
         selection = initial_selection
         if selection.variant == "mixed":
             selection = selection.model_copy(
                 update={"seed": selection.seed + wording_counts[partition]}
             )
             wording_counts[partition] += 1
-        config = CommonsConfig.model_validate(variants[args.variant] | {"seed": seed})
-        module = module_for(config)
         decider = LlmDecider(config, module, transport=None, prompt_selection=selection)
-        state = new_game(config)
         policies = [
             make_baseline("steward", seed=seed * 1000 + slot)
             for slot in range(config.num_agents)
@@ -102,7 +110,7 @@ def main() -> None:
                     json.dumps(
                         {
                             "episode_id": f"commons-family-{args.variant}-{seed}-{selection.selected}-{selection.seed}",
-                            "seed": f"commons-family-{seed}",
+                            "seed": family,
                             "decision_id": state.round * config.num_agents + slot,
                             "prompt": [
                                 {
@@ -127,7 +135,9 @@ def main() -> None:
         outcome = results(
             state, config, module, "complete", ["steward"] * config.num_agents, 0
         )
-        (validation_rows if seed % 5 == 0 else train_rows).extend(rows)
+        (validation_rows if partition else train_rows).extend(rows)
+        if rows:
+            families[split].add(family)
         runs.append(
             {
                 "prompt_selection": {
@@ -138,14 +148,20 @@ def main() -> None:
                 },
                 "normalized_proposals": normalized,
                 "seed": seed,
+                "seed_family": family,
+                "split": split,
                 "decisions": len(rows),
                 "scores": outcome["scores"],
                 "rounds": state.round,
             }
         )
 
-    (args.output / "train.jsonl").write_text("\n".join(train_rows) + "\n")
-    (args.output / "validation.jsonl").write_text("\n".join(validation_rows) + "\n")
+    (args.output / "train.jsonl").write_text(
+        "".join(line + "\n" for line in train_rows)
+    )
+    (args.output / "validation.jsonl").write_text(
+        "".join(line + "\n" for line in validation_rows)
+    )
     (args.output / "manifest.json").write_text(
         json.dumps(
             {
@@ -157,6 +173,14 @@ def main() -> None:
                 "operator_prompt": OPERATOR_PROMPT,
                 "train_examples": len(train_rows),
                 "validation_examples": len(validation_rows),
+                "split_scheme": "physical-family-sha256-first32-validation20-v1",
+                "seed_family_splits": family_splits,
+                "physical_families": {
+                    split: sorted(values) for split, values in families.items()
+                },
+                "independent_split_coverage": bool(
+                    families["train"] and families["validation"]
+                ),
                 "runs": runs,
             },
             indent=2,
