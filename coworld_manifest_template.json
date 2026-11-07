@@ -21,7 +21,7 @@
         "/bin/commons-family"
       ],
       "env": {},
-      "source_url": "https://github.com/Metta-AI/cogame-commons-family/tree/main/src/coworld/examples/commons_family/game"
+      "source_url": "https://github.com/softmax-universe/cogame-commons-family/tree/main/src/coworld/examples/commons_family/game"
     },
     "replay_viewer": {
       "bundle": "static-replay-viewer"
@@ -492,11 +492,11 @@
     "protocols": {
       "player": {
         "type": "uri",
-        "value": "https://github.com/Metta-AI/cogame-commons-family/blob/main/src/coworld/examples/commons_family/game/docs/player_protocol_spec.md"
+        "value": "https://github.com/softmax-universe/cogame-commons-family/blob/main/src/coworld/examples/commons_family/game/docs/player_protocol_spec.md"
       },
       "global": {
         "type": "uri",
-        "value": "https://github.com/Metta-AI/cogame-commons-family/blob/main/src/coworld/examples/commons_family/game/docs/global_protocol_spec.md"
+        "value": "https://github.com/softmax-universe/cogame-commons-family/blob/main/src/coworld/examples/commons_family/game/docs/global_protocol_spec.md"
       }
     },
     "docs": {
@@ -552,7 +552,7 @@
       "env": {
         "PLAYER_PROMPT": "Take the sustainable share and no more: work out what the resource replaces each round, divide by six, take that. Spend an effort unit on the maintenance act whenever the resource is degrading. Say what your quota is and keep to it."
       },
-      "source_url": "https://github.com/Metta-AI/cogame-commons-family/tree/main/src/coworld/examples/commons_family/player",
+      "source_url": "https://github.com/softmax-universe/cogame-commons-family/tree/main/src/coworld/examples/commons_family/player",
       "description": "The reference prompt policy: an LLM seat whose whole strategy is its standing orders."
     },
     {
@@ -566,7 +566,7 @@
       "env": {
         "PLAYER_SCRIPTED": "steward"
       },
-      "source_url": "https://github.com/Metta-AI/cogame-commons-family/tree/main/src/coworld/examples/commons_family/player",
+      "source_url": "https://github.com/softmax-universe/cogame-commons-family/tree/main/src/coworld/examples/commons_family/player",
       "description": "Takes a sustainable share and maintains when the resource needs it. The fallback every prompt seat drops to."
     },
     {
@@ -580,7 +580,7 @@
       "env": {
         "PLAYER_SCRIPTED": "cleaner"
       },
-      "source_url": "https://github.com/Metta-AI/cogame-commons-family/tree/main/src/coworld/examples/commons_family/player",
+      "source_url": "https://github.com/softmax-universe/cogame-commons-family/tree/main/src/coworld/examples/commons_family/player",
       "description": "Spends one effort unit on the public good every round and stewards with the rest. The pure contributor, and exploitable."
     },
     {
@@ -594,7 +594,7 @@
       "env": {
         "PLAYER_SCRIPTED": "punisher"
       },
-      "source_url": "https://github.com/Metta-AI/cogame-commons-family/tree/main/src/coworld/examples/commons_family/player",
+      "source_url": "https://github.com/softmax-universe/cogame-commons-family/tree/main/src/coworld/examples/commons_family/player",
       "description": "Stewards, and pays to burn the worst over-taker on the public ledger."
     },
     {
@@ -608,7 +608,7 @@
       "env": {
         "PLAYER_SCRIPTED": "free_rider"
       },
-      "source_url": "https://github.com/Metta-AI/cogame-commons-family/tree/main/src/coworld/examples/commons_family/player",
+      "source_url": "https://github.com/softmax-universe/cogame-commons-family/tree/main/src/coworld/examples/commons_family/player",
       "description": "Takes the maximum every round and never maintains. The tragedy, distilled."
     },
     {
@@ -622,7 +622,7 @@
       "env": {
         "PLAYER_SCRIPTED": "random"
       },
-      "source_url": "https://github.com/Metta-AI/cogame-commons-family/tree/main/src/coworld/examples/commons_family/player",
+      "source_url": "https://github.com/softmax-universe/cogame-commons-family/tree/main/src/coworld/examples/commons_family/player",
       "description": "Uniform legal decisions. The maximum-variance control."
     }
   ],
@@ -632,7 +632,7 @@
       "type": "grader",
       "name": "Commons Social Planner Grader",
       "description": "Scores an episode as group welfare divided by the module's planner optimum; reports survival, collapse round, dead patches, synchrony, extraction Gini and the public-effort share.",
-      "source_url": "https://github.com/Metta-AI/cogame-commons-family/tree/main/src/coworld/examples/commons_family/grader",
+      "source_url": "https://github.com/softmax-universe/cogame-commons-family/tree/main/src/coworld/examples/commons_family/grader",
       "image": "{{COMMONS_FAMILY_IMAGE}}",
       "run": [
         "python",
